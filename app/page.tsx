@@ -3,11 +3,14 @@
 import {
   Bell,
   Eye,
+  HeartHandshake,
   ImagePlus,
   Loader2,
   LogIn,
   LogOut,
+  MessageCircle,
   Plus,
+  Scale,
   Send,
   UserPlus,
   X,
@@ -24,13 +27,18 @@ import {
 } from "react";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
+type ReactionType = "cheer_up" | "support_you" | "lawsuit_support";
+
 type Post = {
   id: string;
+  author_id: string;
+  author_nickname: string;
   title: string;
-  text: string;
-  imageUrl?: string;
-  createdAt: string;
-  authorName: string;
+  body: string | null;
+  image_url: string | null;
+  created_at: string;
+  reactionCounts: Record<ReactionType, number>;
+  myReaction: ReactionType | null;
 };
 
 type UserState = {
@@ -39,29 +47,115 @@ type UserState = {
   name: string;
 };
 
+const reactionLabels: Record<ReactionType, string> = {
+  cheer_up: "힘내세요",
+  support_you: "응원합니다",
+  lawsuit_support: "소송지원하고 싶어요",
+};
+
 export default function RupanHomePage() {
   const [user, setUser] = useState<UserState | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [logoutLoading, setLogoutLoading] = useState(false);
 
   const [visitorCount, setVisitorCount] = useState<number | null>(null);
+  const [unreadDmCount, setUnreadDmCount] = useState(0);
 
   const [composerOpen, setComposerOpen] = useState(false);
+  const [dmOpen, setDmOpen] = useState(false);
+  const [dmTarget, setDmTarget] = useState<Post | null>(null);
+  const [dmText, setDmText] = useState("");
+  const [dmSending, setDmSending] = useState(false);
 
   const [postTitle, setPostTitle] = useState("");
   const [postText, setPostText] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+
   const [posting, setPosting] = useState(false);
   const [message, setMessage] = useState("");
-
   const [posts, setPosts] = useState<Post[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(true);
 
   const canPost = useMemo(() => {
-    return (
-      postTitle.trim().length > 0 &&
-      (postText.trim().length > 0 || Boolean(imagePreview))
-    );
-  }, [postTitle, postText, imagePreview]);
+    return postTitle.trim().length > 0 && (postText.trim().length > 0 || Boolean(imageFile));
+  }, [postTitle, postText, imageFile]);
+
+  const loadUnreadDmCount = useCallback(async (userId: string) => {
+    const { count } = await supabaseBrowser
+      .from("rupan_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("recipient_id", userId)
+      .is("read_at", null);
+
+    setUnreadDmCount(count ?? 0);
+  }, []);
+
+  const getNickname = async (userId: string, fallback: string) => {
+    const { data } = await supabaseBrowser
+      .from("rupan_profiles")
+      .select("nickname")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    return data?.nickname || fallback;
+  };
+
+  const loadPosts = useCallback(
+    async (currentUserId?: string) => {
+      setLoadingPosts(true);
+
+      const { data: postRows, error } = await supabaseBrowser
+        .from("rupan_posts")
+        .select("id, author_id, author_nickname, title, body, image_url, created_at")
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error || !postRows) {
+        setPosts([]);
+        setLoadingPosts(false);
+        return;
+      }
+
+      const ids = postRows.map((p) => p.id);
+
+      const { data: reactions } = await supabaseBrowser
+        .from("rupan_post_reactions")
+        .select("post_id, user_id, reaction_type")
+        .in("post_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
+
+      const enriched: Post[] = postRows.map((post) => {
+        const rows = reactions?.filter((r) => r.post_id === post.id) ?? [];
+
+        const reactionCounts: Record<ReactionType, number> = {
+          cheer_up: 0,
+          support_you: 0,
+          lawsuit_support: 0,
+        };
+
+        let myReaction: ReactionType | null = null;
+
+        rows.forEach((r) => {
+          const type = r.reaction_type as ReactionType;
+          reactionCounts[type] += 1;
+
+          if (currentUserId && r.user_id === currentUserId) {
+            myReaction = type;
+          }
+        });
+
+        return {
+          ...post,
+          reactionCounts,
+          myReaction,
+        };
+      });
+
+      setPosts(enriched);
+      setLoadingPosts(false);
+    },
+    []
+  );
 
   const loadSession = useCallback(async () => {
     try {
@@ -70,74 +164,82 @@ export default function RupanHomePage() {
 
       if (!sessionUser) {
         setUser(null);
+        await loadPosts();
         return;
       }
 
-      setUser({
+      const fallback =
+        sessionUser.user_metadata?.full_name ||
+        sessionUser.user_metadata?.name ||
+        sessionUser.email?.split("@")[0] ||
+        "Rupan User";
+
+      const nickname = await getNickname(sessionUser.id, fallback);
+
+      const nextUser = {
         id: sessionUser.id,
         email: sessionUser.email ?? null,
-        name:
-          sessionUser.user_metadata?.full_name ||
-          sessionUser.user_metadata?.name ||
-          sessionUser.email?.split("@")[0] ||
-          "Rupan User",
-      });
+        name: nickname,
+      };
+
+      setUser(nextUser);
+      await loadUnreadDmCount(sessionUser.id);
+      await loadPosts(sessionUser.id);
     } catch {
       setUser(null);
+      await loadPosts();
     } finally {
       setAuthLoading(false);
     }
-  }, []);
+  }, [loadPosts, loadUnreadDmCount]);
 
   useEffect(() => {
     loadSession();
 
-    const { data } = supabaseBrowser.auth.onAuthStateChange(
-      (_event, session) => {
-        const sessionUser = session?.user;
+    const { data } = supabaseBrowser.auth.onAuthStateChange(async (_event, session) => {
+      const sessionUser = session?.user;
 
-        if (!sessionUser) {
-          setUser(null);
-          setAuthLoading(false);
-          return;
-        }
-
-        setUser({
-          id: sessionUser.id,
-          email: sessionUser.email ?? null,
-          name:
-            sessionUser.user_metadata?.full_name ||
-            sessionUser.user_metadata?.name ||
-            sessionUser.email?.split("@")[0] ||
-            "Rupan User",
-        });
-
+      if (!sessionUser) {
+        setUser(null);
+        setUnreadDmCount(0);
         setAuthLoading(false);
+        await loadPosts();
+        return;
       }
-    );
+
+      const fallback =
+        sessionUser.user_metadata?.full_name ||
+        sessionUser.user_metadata?.name ||
+        sessionUser.email?.split("@")[0] ||
+        "Rupan User";
+
+      const nickname = await getNickname(sessionUser.id, fallback);
+
+      setUser({
+        id: sessionUser.id,
+        email: sessionUser.email ?? null,
+        name: nickname,
+      });
+
+      await loadUnreadDmCount(sessionUser.id);
+      await loadPosts(sessionUser.id);
+      setAuthLoading(false);
+    });
 
     return () => {
       data.subscription.unsubscribe();
     };
-  }, [loadSession]);
+  }, [loadSession, loadPosts, loadUnreadDmCount]);
 
   useEffect(() => {
     const countVisitor = async () => {
       try {
-        const alreadyCounted =
-          typeof window !== "undefined"
-            ? sessionStorage.getItem("rupan_visitor_counted")
-            : null;
+        const alreadyCounted = sessionStorage.getItem("rupan_visitor_counted");
 
         const res = await fetch("/api/rupan/visitors", {
           method: alreadyCounted ? "GET" : "POST",
           cache: "no-store",
         });
-
-        if (!res.ok) {
-          setVisitorCount(null);
-          return;
-        }
 
         const json = await res.json();
 
@@ -145,7 +247,7 @@ export default function RupanHomePage() {
           setVisitorCount(json.total);
         }
 
-        if (!alreadyCounted && typeof window !== "undefined") {
+        if (!alreadyCounted) {
           sessionStorage.setItem("rupan_visitor_counted", "true");
         }
       } catch {
@@ -158,46 +260,17 @@ export default function RupanHomePage() {
 
   useEffect(() => {
     return () => {
-      if (imagePreview) {
-        URL.revokeObjectURL(imagePreview);
-      }
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
     };
   }, [imagePreview]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setComposerOpen(false);
-      }
-    };
-
-    if (composerOpen) {
-      window.addEventListener("keydown", onKeyDown);
-    }
-
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [composerOpen]);
 
   const resetComposer = () => {
     setPostTitle("");
     setPostText("");
     setMessage("");
-    if (imagePreview) {
-      URL.revokeObjectURL(imagePreview);
-    }
+    setImageFile(null);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
     setImagePreview(null);
-  };
-
-  const openComposer = () => {
-    setMessage("");
-    setComposerOpen(true);
-  };
-
-  const closeComposer = () => {
-    setComposerOpen(false);
-    setMessage("");
   };
 
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -212,28 +285,36 @@ export default function RupanHomePage() {
       return;
     }
 
-    const maxSizeMb = 8;
-    const maxSizeBytes = maxSizeMb * 1024 * 1024;
-
-    if (file.size > maxSizeBytes) {
-      setMessage(`Image is too large. Please upload under ${maxSizeMb}MB.`);
+    if (file.size > 8 * 1024 * 1024) {
+      setMessage("Image is too large. Please upload under 8MB.");
       event.target.value = "";
       return;
     }
 
-    if (imagePreview) {
-      URL.revokeObjectURL(imagePreview);
-    }
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
 
-    const previewUrl = URL.createObjectURL(file);
-    setImagePreview(previewUrl);
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
   };
 
-  const removeImage = () => {
-    if (imagePreview) {
-      URL.revokeObjectURL(imagePreview);
-    }
-    setImagePreview(null);
+  const uploadImage = async (file: File, userId: string) => {
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+
+    const { error } = await supabaseBrowser.storage
+      .from("rupan-post-images")
+      .upload(path, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (error) throw error;
+
+    const { data } = supabaseBrowser.storage
+      .from("rupan-post-images")
+      .getPublicUrl(path);
+
+    return data.publicUrl;
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -245,38 +326,115 @@ export default function RupanHomePage() {
       return;
     }
 
-    if (!postTitle.trim()) {
-      setMessage("Please add a title.");
-      return;
-    }
-
-    if (!postText.trim() && !imagePreview) {
-      setMessage("Please add content or upload a photo.");
+    if (!canPost) {
+      setMessage("Please add a title and content or photo.");
       return;
     }
 
     try {
       setPosting(true);
 
-      const newPost: Post = {
-        id:
-          typeof crypto !== "undefined" && "randomUUID" in crypto
-            ? crypto.randomUUID()
-            : String(Date.now()),
-        title: postTitle.trim(),
-        text: postText.trim(),
-        imageUrl: imagePreview || undefined,
-        createdAt: new Date().toLocaleString(),
-        authorName: user.name,
-      };
+      let imageUrl: string | null = null;
 
-      setPosts((prev) => [newPost, ...prev]);
+      if (imageFile) {
+        imageUrl = await uploadImage(imageFile, user.id);
+      }
+
+      const { error } = await supabaseBrowser.from("rupan_posts").insert({
+        author_id: user.id,
+        author_nickname: user.name,
+        title: postTitle.trim(),
+        body: postText.trim() || null,
+        image_url: imageUrl,
+      });
+
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+
       resetComposer();
       setComposerOpen(false);
+      await loadPosts(user.id);
     } catch {
-      setMessage("Failed to publish post. Please try again.");
+      setMessage("Failed to publish post.");
     } finally {
       setPosting(false);
+    }
+  };
+
+  const handleReaction = async (post: Post, reactionType: ReactionType) => {
+    if (!user) {
+      alert("Please login or sign up first.");
+      return;
+    }
+
+    if (post.author_id === user.id) {
+      alert("You cannot react to your own post.");
+      return;
+    }
+
+    const { error } = await supabaseBrowser.from("rupan_post_reactions").upsert(
+      {
+        post_id: post.id,
+        user_id: user.id,
+        reaction_type: reactionType,
+      },
+      {
+        onConflict: "post_id,user_id",
+      }
+    );
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    await loadPosts(user.id);
+  };
+
+  const openDm = (post: Post) => {
+    if (!user) {
+      alert("Please login or sign up first.");
+      return;
+    }
+
+    if (post.author_id === user.id) {
+      alert("You cannot send DM to yourself.");
+      return;
+    }
+
+    setDmTarget(post);
+    setDmText("");
+    setDmOpen(true);
+  };
+
+  const sendDm = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!user || !dmTarget || !dmText.trim()) return;
+
+    try {
+      setDmSending(true);
+
+      const { error } = await supabaseBrowser.from("rupan_messages").insert({
+        sender_id: user.id,
+        recipient_id: dmTarget.author_id,
+        sender_nickname: user.name,
+        recipient_nickname: dmTarget.author_nickname,
+        body: dmText.trim(),
+      });
+
+      if (error) {
+        alert(error.message);
+        return;
+      }
+
+      setDmOpen(false);
+      setDmText("");
+      setDmTarget(null);
+    } finally {
+      setDmSending(false);
     }
   };
 
@@ -285,6 +443,7 @@ export default function RupanHomePage() {
       setLogoutLoading(true);
       await supabaseBrowser.auth.signOut();
       setUser(null);
+      setUnreadDmCount(0);
     } finally {
       setLogoutLoading(false);
     }
@@ -296,18 +455,17 @@ export default function RupanHomePage() {
         user={user}
         authLoading={authLoading}
         logoutLoading={logoutLoading}
+        unreadDmCount={unreadDmCount}
         onLogout={handleLogout}
       />
 
       <section className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <div className="flex items-center justify-start">
-          <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/90 px-4 py-2 text-xs font-black text-zinc-700 shadow-sm backdrop-blur">
-            <Eye size={15} />
-            <span>Visitors</span>
-            <span className="text-zinc-950">
-              {visitorCount === null ? "—" : visitorCount.toLocaleString()}
-            </span>
-          </div>
+        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-black/10 bg-white/90 px-4 py-2 text-xs font-black text-zinc-700 shadow-sm">
+          <Eye size={15} />
+          <span>Visitors</span>
+          <span className="text-zinc-950">
+            {visitorCount === null ? "—" : visitorCount.toLocaleString()}
+          </span>
         </div>
 
         <section className="overflow-hidden rounded-[2rem] border border-black/10 bg-white shadow-sm">
@@ -317,19 +475,16 @@ export default function RupanHomePage() {
             </p>
 
             <p className="max-w-3xl text-sm leading-7 text-white/80 sm:text-[15px]">
-              The law may not compensate what you lost. Your boss may be an
-              asshole. HR may be a deeply unfair group. This is a space to
-              protect your life when the people hurting you may be the last ones
-              you expected.
+              The law may not compensate what you lost. Your boss may be an asshole.
+              HR may be a deeply unfair group. This is a space to protect your life
+              when the people hurting you may be the last ones you expected.
             </p>
 
             <div className="mt-4">
               {user ? (
                 <div className="inline-flex max-w-full items-center rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/85 ring-1 ring-white/15">
                   Logged in as&nbsp;
-                  <span className="truncate font-black text-white">
-                    {user.name}
-                  </span>
+                  <span className="truncate font-black text-white">{user.name}</span>
                 </div>
               ) : (
                 <div className="inline-flex max-w-full items-center rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/85 ring-1 ring-white/15">
@@ -350,7 +505,12 @@ export default function RupanHomePage() {
             </p>
           </div>
 
-          {posts.length === 0 ? (
+          {loadingPosts ? (
+            <div className="rounded-[2rem] border border-black/10 bg-white p-10 text-center">
+              <Loader2 className="mx-auto animate-spin text-zinc-400" />
+              <p className="mt-3 text-sm font-bold text-zinc-500">Loading posts...</p>
+            </div>
+          ) : posts.length === 0 ? (
             <div className="rounded-[2rem] border border-dashed border-black/15 bg-white/70 p-10 text-center">
               <p className="text-base font-black text-zinc-600">
                 No published posts yet.
@@ -364,9 +524,7 @@ export default function RupanHomePage() {
               <article
                 key={post.id}
                 className={`overflow-hidden rounded-[2rem] border bg-white shadow-sm ${
-                  index === 0
-                    ? "border-zinc-950/15 ring-1 ring-zinc-950/5"
-                    : "border-black/10"
+                  index === 0 ? "border-zinc-950/15 ring-1 ring-zinc-950/5" : "border-black/10"
                 }`}
               >
                 {index === 0 && (
@@ -377,14 +535,14 @@ export default function RupanHomePage() {
 
                 <div className="flex items-center gap-3 px-5 py-4">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-sm font-black text-white">
-                    {post.authorName.slice(0, 1).toUpperCase()}
+                    {post.author_nickname.slice(0, 1).toUpperCase()}
                   </div>
 
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-black">
-                      {post.authorName}
+                    <p className="truncate text-sm font-black">{post.author_nickname}</p>
+                    <p className="text-xs text-zinc-500">
+                      {new Date(post.created_at).toLocaleString()}
                     </p>
-                    <p className="text-xs text-zinc-500">{post.createdAt}</p>
                   </div>
                 </div>
 
@@ -393,29 +551,63 @@ export default function RupanHomePage() {
                     {post.title}
                   </h3>
 
-                  {post.text && (
+                  {post.body && (
                     <p className="mt-3 whitespace-pre-wrap text-[15px] leading-7 text-zinc-700">
-                      {post.text}
+                      {post.body}
                     </p>
                   )}
                 </div>
 
-                {post.imageUrl && (
+                {post.image_url && (
                   <Image
-                    src={post.imageUrl}
+                    src={post.image_url}
                     alt={post.title}
                     width={1400}
                     height={900}
                     className="w-full object-cover"
                   />
                 )}
+
+                <div className="border-t border-black/10 px-4 py-4">
+                  <div className="grid gap-2 sm:grid-cols-4">
+                    <ReactionButton
+                      label="힘내세요"
+                      count={post.reactionCounts.cheer_up}
+                      active={post.myReaction === "cheer_up"}
+                      onClick={() => handleReaction(post, "cheer_up")}
+                    />
+
+                    <ReactionButton
+                      label="응원합니다"
+                      count={post.reactionCounts.support_you}
+                      active={post.myReaction === "support_you"}
+                      onClick={() => handleReaction(post, "support_you")}
+                    />
+
+                    <ReactionButton
+                      label="소송지원하고 싶어요"
+                      count={post.reactionCounts.lawsuit_support}
+                      active={post.myReaction === "lawsuit_support"}
+                      onClick={() => handleReaction(post, "lawsuit_support")}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => openDm(post)}
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-3 text-sm font-black shadow-sm transition hover:bg-zinc-50"
+                    >
+                      <MessageCircle size={17} />
+                      DM
+                    </button>
+                  </div>
+                </div>
               </article>
             ))
           )}
         </section>
       </section>
 
-      <FloatingComposeButton onClick={openComposer} />
+      <FloatingComposeButton onClick={() => setComposerOpen(true)} />
 
       {composerOpen && (
         <ComposerModal
@@ -426,13 +618,28 @@ export default function RupanHomePage() {
           imagePreview={imagePreview}
           message={message}
           canPost={canPost}
-          onClose={closeComposer}
+          onClose={() => setComposerOpen(false)}
           onSubmit={handleSubmit}
           onTitleChange={setPostTitle}
           onTextChange={setPostText}
           onImageChange={handleImageChange}
-          onRemoveImage={removeImage}
+          onRemoveImage={() => {
+            if (imagePreview) URL.revokeObjectURL(imagePreview);
+            setImagePreview(null);
+            setImageFile(null);
+          }}
           onMessageClear={() => setMessage("")}
+        />
+      )}
+
+      {dmOpen && dmTarget && (
+        <DmModal
+          targetName={dmTarget.author_nickname}
+          text={dmText}
+          sending={dmSending}
+          onTextChange={setDmText}
+          onClose={() => setDmOpen(false)}
+          onSubmit={sendDm}
         />
       )}
 
@@ -441,15 +648,45 @@ export default function RupanHomePage() {
   );
 }
 
+function ReactionButton({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-black shadow-sm transition ${
+        active
+          ? "bg-zinc-950 text-white"
+          : "border border-black/10 bg-white text-zinc-950 hover:bg-zinc-50"
+      }`}
+    >
+      {label.includes("소송") ? <Scale size={17} /> : <HeartHandshake size={17} />}
+      <span>{label}</span>
+      <span className={active ? "text-white/80" : "text-zinc-400"}>{count}</span>
+    </button>
+  );
+}
+
 function Header({
   user,
   authLoading,
   logoutLoading,
+  unreadDmCount,
   onLogout,
 }: {
   user: UserState | null;
   authLoading: boolean;
   logoutLoading: boolean;
+  unreadDmCount: number;
   onLogout: () => Promise<void>;
 }) {
   return (
@@ -472,10 +709,25 @@ function Header({
           <button
             type="button"
             aria-label="Notifications"
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-zinc-900 shadow-sm transition hover:bg-zinc-50"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-zinc-900 shadow-sm"
           >
             <Bell size={18} />
           </button>
+
+          {user && (
+            <Link
+              href="/dm"
+              aria-label="Direct messages"
+              className="relative flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-zinc-900 shadow-sm transition hover:bg-zinc-50"
+            >
+              <MessageCircle size={18} />
+              {unreadDmCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-black text-white">
+                  {unreadDmCount > 9 ? "9+" : unreadDmCount}
+                </span>
+              )}
+            </Link>
+          )}
 
           {authLoading ? (
             <div className="flex h-10 w-24 items-center justify-center rounded-full bg-white text-zinc-500 shadow-sm">
@@ -500,20 +752,29 @@ function Header({
               </Link>
             </>
           ) : (
-            <button
-              type="button"
-              onClick={onLogout}
-              disabled={logoutLoading}
-              className="flex items-center gap-2 rounded-full bg-zinc-950 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
-            >
-              {logoutLoading ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <LogOut size={16} />
-              )}
-              <span className="hidden sm:inline">Logout</span>
-              <span className="sm:hidden">Out</span>
-            </button>
+            <>
+              <Link
+                href="/profile"
+                className="hidden items-center rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black shadow-sm transition hover:bg-zinc-50 sm:flex"
+              >
+                Profile
+              </Link>
+
+              <button
+                type="button"
+                onClick={onLogout}
+                disabled={logoutLoading}
+                className="flex items-center gap-2 rounded-full bg-zinc-950 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+              >
+                {logoutLoading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <LogOut size={16} />
+                )}
+                <span className="hidden sm:inline">Logout</span>
+                <span className="sm:hidden">Out</span>
+              </button>
+            </>
           )}
         </nav>
       </div>
@@ -557,9 +818,7 @@ function ComposerModal({
       <div className="w-full rounded-t-[2rem] border border-black/10 bg-white shadow-2xl sm:max-w-2xl sm:rounded-[2rem]">
         <div className="flex items-center justify-between border-b border-black/10 px-5 py-4 sm:px-6">
           <div>
-            <h3 className="text-lg font-black tracking-tight">
-              Publish a post
-            </h3>
+            <h3 className="text-lg font-black tracking-tight">Publish a post</h3>
             <p className="mt-1 text-xs font-medium text-zinc-500">
               Add a title, your story, and an optional photo.
             </p>
@@ -568,7 +827,7 @@ function ComposerModal({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-zinc-700 shadow-sm"
             aria-label="Close"
           >
             <X size={18} />
@@ -582,39 +841,28 @@ function ComposerModal({
             </div>
           )}
 
-          <label className="block">
-            <span className="mb-2 block text-sm font-black">Title</span>
-            <input
-              type="text"
-              value={postTitle}
-              onChange={(e) => {
-                onTitleChange(e.target.value);
-                onMessageClear();
-              }}
-              placeholder="Write a strong title"
-              maxLength={120}
-              className="w-full rounded-2xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-900 focus:bg-white"
-            />
-          </label>
+          <input
+            type="text"
+            value={postTitle}
+            onChange={(e) => {
+              onTitleChange(e.target.value);
+              onMessageClear();
+            }}
+            placeholder="Title"
+            maxLength={120}
+            className="w-full rounded-2xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-900 focus:bg-white"
+          />
 
-          <label className="block">
-            <span className="mb-2 block text-sm font-black">Story</span>
-            <textarea
-              value={postText}
-              onChange={(e) => {
-                onTextChange(e.target.value);
-                onMessageClear();
-              }}
-              placeholder="What happened?"
-              maxLength={3000}
-              className="min-h-40 w-full resize-none rounded-3xl border border-black/10 bg-zinc-50 px-4 py-4 text-sm leading-7 outline-none transition placeholder:text-zinc-400 focus:border-zinc-900 focus:bg-white"
-            />
-          </label>
-
-          <div className="flex items-center justify-between px-1 text-xs font-bold text-zinc-400">
-            <span>{postText.length}/3000</span>
-            <span>{postTitle.length}/120 title</span>
-          </div>
+          <textarea
+            value={postText}
+            onChange={(e) => {
+              onTextChange(e.target.value);
+              onMessageClear();
+            }}
+            placeholder="What happened?"
+            maxLength={3000}
+            className="min-h-40 w-full resize-none rounded-3xl border border-black/10 bg-zinc-50 px-4 py-4 text-sm leading-7 outline-none focus:border-zinc-900 focus:bg-white"
+          />
 
           {imagePreview && (
             <div className="relative overflow-hidden rounded-3xl border border-black/10 bg-zinc-100">
@@ -629,7 +877,7 @@ function ComposerModal({
               <button
                 type="button"
                 onClick={onRemoveImage}
-                className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/70 px-4 py-2 text-xs font-black text-white backdrop-blur transition hover:bg-black"
+                className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/70 px-4 py-2 text-xs font-black text-white"
               >
                 <X size={14} />
                 Remove
@@ -644,22 +892,17 @@ function ComposerModal({
           )}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-black shadow-sm transition hover:bg-zinc-50">
+            <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-black shadow-sm">
               <ImagePlus size={18} />
               Upload photo
-              <input
-                type="file"
-                accept="image/*"
-                onChange={onImageChange}
-                className="hidden"
-              />
+              <input type="file" accept="image/*" onChange={onImageChange} className="hidden" />
             </label>
 
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-black shadow-sm transition hover:bg-zinc-50"
+                className="rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-black shadow-sm"
               >
                 Cancel
               </button>
@@ -667,19 +910,72 @@ function ComposerModal({
               <button
                 type="submit"
                 disabled={!canPost || posting}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-zinc-950 px-6 py-3 text-sm font-black text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-zinc-950 px-6 py-3 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-zinc-300"
               >
-                {posting ? (
-                  <Loader2 size={17} className="animate-spin" />
-                ) : (
-                  <Send size={17} />
-                )}
+                {posting ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
                 Publish
               </button>
             </div>
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+function DmModal({
+  targetName,
+  text,
+  sending,
+  onTextChange,
+  onClose,
+  onSubmit,
+}: {
+  targetName: string;
+  text: string;
+  sending: boolean;
+  onTextChange: (value: string) => void;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <form
+        onSubmit={onSubmit}
+        className="w-full rounded-t-[2rem] border border-black/10 bg-white p-5 shadow-2xl sm:max-w-md sm:rounded-[2rem] sm:p-6"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-black">Send DM</h3>
+            <p className="mt-1 text-sm text-zinc-500">To {targetName}</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <textarea
+          value={text}
+          onChange={(e) => onTextChange(e.target.value)}
+          placeholder="Write a private message..."
+          maxLength={1000}
+          className="min-h-36 w-full resize-none rounded-3xl border border-black/10 bg-zinc-50 px-4 py-4 text-sm leading-7 outline-none focus:border-zinc-900 focus:bg-white"
+        />
+
+        <button
+          type="submit"
+          disabled={!text.trim() || sending}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-zinc-950 px-5 py-3 text-sm font-black text-white disabled:bg-zinc-300"
+        >
+          {sending ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
+          Send DM
+        </button>
+      </form>
     </div>
   );
 }
@@ -709,21 +1005,11 @@ function Footer() {
         </div>
 
         <nav className="flex flex-wrap gap-x-5 gap-y-3 text-sm font-bold text-zinc-600">
-          <Link href="/about" className="hover:text-zinc-950">
-            About
-          </Link>
-          <Link href="/terms" className="hover:text-zinc-950">
-            Terms
-          </Link>
-          <Link href="/privacy" className="hover:text-zinc-950">
-            Privacy
-          </Link>
-          <Link href="/donate" className="hover:text-zinc-950">
-            Donate
-          </Link>
-          <Link href="/contact" className="hover:text-zinc-950">
-            Contact
-          </Link>
+          <Link href="/about" className="hover:text-zinc-950">About</Link>
+          <Link href="/terms" className="hover:text-zinc-950">Terms</Link>
+          <Link href="/privacy" className="hover:text-zinc-950">Privacy</Link>
+          <Link href="/donate" className="hover:text-zinc-950">Donate</Link>
+          <Link href="/contact" className="hover:text-zinc-950">Contact</Link>
         </nav>
 
         <p className="text-xs text-zinc-400">
