@@ -2,7 +2,6 @@
 
 import {
   Bell,
-  Camera,
   Eye,
   ImagePlus,
   Loader2,
@@ -58,7 +57,10 @@ export default function RupanHomePage() {
   const [posts, setPosts] = useState<Post[]>([]);
 
   const canPost = useMemo(() => {
-    return postTitle.trim().length > 0 && (postText.trim().length > 0 || Boolean(imagePreview));
+    return (
+      postTitle.trim().length > 0 &&
+      (postText.trim().length > 0 || Boolean(imagePreview))
+    );
   }, [postTitle, postText, imagePreview]);
 
   const loadSession = useCallback(async () => {
@@ -90,27 +92,29 @@ export default function RupanHomePage() {
   useEffect(() => {
     loadSession();
 
-    const { data } = supabaseBrowser.auth.onAuthStateChange((_event, session) => {
-      const sessionUser = session?.user;
+    const { data } = supabaseBrowser.auth.onAuthStateChange(
+      (_event, session) => {
+        const sessionUser = session?.user;
 
-      if (!sessionUser) {
-        setUser(null);
+        if (!sessionUser) {
+          setUser(null);
+          setAuthLoading(false);
+          return;
+        }
+
+        setUser({
+          id: sessionUser.id,
+          email: sessionUser.email ?? null,
+          name:
+            sessionUser.user_metadata?.full_name ||
+            sessionUser.user_metadata?.name ||
+            sessionUser.email?.split("@")[0] ||
+            "Rupan User",
+        });
+
         setAuthLoading(false);
-        return;
       }
-
-      setUser({
-        id: sessionUser.id,
-        email: sessionUser.email ?? null,
-        name:
-          sessionUser.user_metadata?.full_name ||
-          sessionUser.user_metadata?.name ||
-          sessionUser.email?.split("@")[0] ||
-          "Rupan User",
-      });
-
-      setAuthLoading(false);
-    });
+    );
 
     return () => {
       data.subscription.unsubscribe();
@@ -296,7 +300,7 @@ export default function RupanHomePage() {
       />
 
       <section className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-start">
           <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/90 px-4 py-2 text-xs font-black text-zinc-700 shadow-sm backdrop-blur">
             <Eye size={15} />
             <span>Visitors</span>
@@ -304,75 +308,46 @@ export default function RupanHomePage() {
               {visitorCount === null ? "—" : visitorCount.toLocaleString()}
             </span>
           </div>
-
-          <button
-            type="button"
-            onClick={openComposer}
-            className="hidden items-center gap-2 rounded-full bg-zinc-950 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-zinc-800 sm:inline-flex"
-          >
-            <Plus size={16} />
-            New post
-          </button>
         </div>
 
         <section className="overflow-hidden rounded-[2rem] border border-black/10 bg-white shadow-sm">
-          <div className="bg-gradient-to-br from-black via-zinc-900 to-zinc-700 px-5 py-8 text-white sm:px-8 sm:py-10">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.35em] text-white/60">
+          <div className="bg-gradient-to-br from-black via-zinc-900 to-zinc-700 px-5 py-5 text-white sm:px-7 sm:py-6">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/60">
               Rupan
             </p>
 
-            <h1 className="max-w-3xl text-3xl font-black tracking-tight sm:text-5xl">
-              Protect your life. Say what happened.
-            </h1>
-
-            <p className="mt-4 max-w-3xl text-sm leading-7 text-white/80 sm:text-base">
-              The law may not compensate what you lost. Your boss may be an asshole.
-              HR may be a deeply unfair group. This is a space to protect your life
-              when the people hurting you may be the last ones you expected.
+            <p className="max-w-3xl text-sm leading-7 text-white/80 sm:text-[15px]">
+              The law may not compensate what you lost. Your boss may be an
+              asshole. HR may be a deeply unfair group. This is a space to
+              protect your life when the people hurting you may be the last ones
+              you expected.
             </p>
 
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="mt-4">
               {user ? (
                 <div className="inline-flex max-w-full items-center rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/85 ring-1 ring-white/15">
                   Logged in as&nbsp;
-                  <span className="truncate font-black text-white">{user.name}</span>
+                  <span className="truncate font-black text-white">
+                    {user.name}
+                  </span>
                 </div>
               ) : (
                 <div className="inline-flex max-w-full items-center rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/85 ring-1 ring-white/15">
                   Login or sign up to publish.
                 </div>
               )}
-
-              <button
-                type="button"
-                onClick={openComposer}
-                className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-zinc-950 shadow-sm transition hover:bg-zinc-100"
-              >
-                <Plus size={16} />
-                Publish a post
-              </button>
             </div>
           </div>
         </section>
 
         <section className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-black tracking-tight sm:text-2xl">
-                Published posts
-              </h2>
-              <p className="mt-1 text-sm font-medium text-zinc-500">
-                The newest published posts appear first.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={openComposer}
-              className="hidden rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black shadow-sm transition hover:bg-zinc-50 md:inline-flex"
-            >
-              Add post
-            </button>
+          <div>
+            <h2 className="text-xl font-black tracking-tight sm:text-2xl">
+              Published posts
+            </h2>
+            <p className="mt-1 text-sm font-medium text-zinc-500">
+              The newest published posts appear first.
+            </p>
           </div>
 
           {posts.length === 0 ? (
@@ -406,7 +381,9 @@ export default function RupanHomePage() {
                   </div>
 
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-black">{post.authorName}</p>
+                    <p className="truncate text-sm font-black">
+                      {post.authorName}
+                    </p>
                     <p className="text-xs text-zinc-500">{post.createdAt}</p>
                   </div>
                 </div>
@@ -580,7 +557,9 @@ function ComposerModal({
       <div className="w-full rounded-t-[2rem] border border-black/10 bg-white shadow-2xl sm:max-w-2xl sm:rounded-[2rem]">
         <div className="flex items-center justify-between border-b border-black/10 px-5 py-4 sm:px-6">
           <div>
-            <h3 className="text-lg font-black tracking-tight">Publish a post</h3>
+            <h3 className="text-lg font-black tracking-tight">
+              Publish a post
+            </h3>
             <p className="mt-1 text-xs font-medium text-zinc-500">
               Add a title, your story, and an optional photo.
             </p>
