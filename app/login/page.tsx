@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeft,
   Chrome,
   Eye,
   EyeOff,
@@ -82,24 +83,34 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen bg-[#f7f4ef] px-4 py-6 text-zinc-950 sm:px-6">
       <section className="mx-auto flex w-full max-w-md flex-col gap-5">
+        <div className="flex items-center justify-between gap-3">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black shadow-sm transition hover:bg-zinc-50"
+          >
+            <ArrowLeft size={16} />
+            Home
+          </Link>
+        </div>
+
         <Link href="/" className="inline-flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-zinc-950 text-lg font-black text-white shadow-sm">
-            R
+            L
           </div>
 
           <div>
-            <p className="text-xl font-black tracking-tight">Rupan</p>
+            <p className="text-xl font-black tracking-tight">Lupin</p>
             <p className="text-xs font-semibold text-zinc-500">
-              Welcome back
+              A righteous outlaw protecting your dignity
             </p>
           </div>
         </Link>
 
         <div className="overflow-hidden rounded-[2rem] border border-black/10 bg-white shadow-sm">
           <div className="bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-700 px-6 py-7 text-white">
-            <h1 className="text-3xl font-black tracking-tight">Login</h1>
+            <h1 className="text-3xl font-black tracking-tight">Log in</h1>
             <p className="mt-2 text-sm leading-6 text-white/75">
-              Login to Rupan with Google or email.
+              Continue to Lupin with Google or email.
             </p>
           </div>
 
@@ -140,6 +151,7 @@ export default function LoginPage() {
                     }}
                     placeholder="you@example.com"
                     className="w-full bg-transparent text-sm outline-none"
+                    autoComplete="email"
                     required
                   />
                 </div>
@@ -158,6 +170,7 @@ export default function LoginPage() {
                     placeholder="Your password"
                     minLength={6}
                     className="w-full bg-transparent text-sm outline-none"
+                    autoComplete="current-password"
                     required
                   />
 
@@ -188,12 +201,12 @@ export default function LoginPage() {
                 ) : (
                   <LogIn size={18} />
                 )}
-                Login
+                Log in
               </button>
             </form>
 
             <p className="text-center text-sm text-zinc-500">
-              New to Rupan?{" "}
+              New to Lupin?{" "}
               <Link href="/signup" className="font-black text-zinc-950 underline">
                 Sign up
               </Link>
