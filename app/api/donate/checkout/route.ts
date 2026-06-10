@@ -68,7 +68,7 @@ export async function POST(req: Request) {
             currency: "usd",
             unit_amount: amount * 100,
             product_data: {
-              name: "Rupan Donation",
+              name: "Lupin Donation",
               description:
                 "Support people facing difficult situations and help change the world, even a little.",
             },
