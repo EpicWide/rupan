@@ -39,7 +39,7 @@ export default function SignupPage() {
     );
   }, [email, password, agreeTerms, agreePrivacy, emailLoading, googleLoading]);
 
-  const requireAgreement = () => {
+  const checkAgreement = () => {
     if (!agreeTerms || !agreePrivacy) {
       setMessage("You must agree to the Terms and Privacy Policy before signing up.");
       return false;
@@ -52,7 +52,7 @@ export default function SignupPage() {
     event.preventDefault();
     setMessage("");
 
-    if (!requireAgreement()) return;
+    if (!checkAgreement()) return;
 
     if (password.length < 6) {
       setMessage("Password must be at least 6 characters.");
@@ -68,7 +68,7 @@ export default function SignupPage() {
         email: email.trim(),
         password,
         options: {
-          emailRedirectTo: `${origin}/auth/callback`,
+          emailRedirectTo: `${origin}/auth/callback?terms=agreed`,
           data: {
             agreed_terms: true,
             agreed_privacy: true,
@@ -86,9 +86,9 @@ export default function SignupPage() {
       setMessage("Account created. Please check your email if confirmation is required.");
 
       setTimeout(() => {
-        router.replace("/");
+        router.replace("/profile");
         router.refresh();
-      }, 900);
+      }, 800);
     } catch {
       setMessage("Signup failed. Please try again.");
     } finally {
@@ -99,7 +99,7 @@ export default function SignupPage() {
   const handleGoogleSignup = async () => {
     setMessage("");
 
-    if (!requireAgreement()) return;
+    if (!checkAgreement()) return;
 
     try {
       setGoogleLoading(true);
