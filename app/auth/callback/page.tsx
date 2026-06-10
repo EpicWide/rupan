@@ -34,7 +34,7 @@ function AuthCallbackInner() {
         });
       }
 
-      router.replace("/profile");
+      router.replace("/");
       router.refresh();
     };
 
