@@ -111,7 +111,7 @@ export default function ProfilePage() {
           }));
         }
       } catch {
-        setMessage("Failed to load profile.");
+        setMessage("Failed to load your profile.");
       } finally {
         setLoading(false);
       }
@@ -130,7 +130,7 @@ export default function ProfilePage() {
     setMessage("");
 
     if (!userId) {
-      setMessage("Please login first.");
+      setMessage("Please log in first.");
       return;
     }
 
@@ -162,9 +162,15 @@ export default function ProfilePage() {
         return;
       }
 
+      await supabaseBrowser.auth.updateUser({
+        data: {
+          nickname: form.nickname.trim(),
+        },
+      });
+
       setMessage("Profile saved.");
     } catch {
-      setMessage("Failed to save profile.");
+      setMessage("Failed to save your profile.");
     } finally {
       setSaving(false);
     }
@@ -178,7 +184,9 @@ export default function ProfilePage() {
             R
           </div>
           <Loader2 className="mx-auto animate-spin text-zinc-500" size={24} />
-          <p className="mt-4 text-sm font-bold text-zinc-500">Loading profile...</p>
+          <p className="mt-4 text-sm font-bold text-zinc-500">
+            Loading profile...
+          </p>
         </div>
       </main>
     );
@@ -187,7 +195,7 @@ export default function ProfilePage() {
   return (
     <main className="min-h-screen bg-[#f7f4ef] px-4 py-6 text-zinc-950 sm:px-6">
       <section className="mx-auto flex w-full max-w-2xl flex-col gap-5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <Link
             href="/"
             className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black shadow-sm transition hover:bg-zinc-50"
@@ -204,18 +212,21 @@ export default function ProfilePage() {
 
         <div className="overflow-hidden rounded-[2rem] border border-black/10 bg-white shadow-sm">
           <div className="bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-700 px-6 py-7 text-white">
-            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
-              <Sparkles size={22} />
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
+              <Sparkles size={24} />
             </div>
 
-            <h1 className="text-3xl font-black tracking-tight">Your profile</h1>
-            <p className="mt-2 text-sm leading-6 text-white/75">
-              Add a simple public identity for Rupan. Only nickname is required.
+            <h1 className="text-3xl font-black tracking-tight">
+              Your profile
+            </h1>
+
+            <p className="mt-3 text-sm leading-6 text-white/75">
+              Create a simple identity for Rupan. Only your nickname is required.
             </p>
 
             {email && (
-              <p className="mt-4 inline-flex rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/80 ring-1 ring-white/15">
-                {email}
+              <p className="mt-4 inline-flex max-w-full rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/80 ring-1 ring-white/15">
+                <span className="truncate">{email}</span>
               </p>
             )}
           </div>
@@ -225,6 +236,7 @@ export default function ProfilePage() {
               <span className="mb-2 block text-sm font-black">
                 Nickname <span className="text-red-500">*</span>
               </span>
+
               <div className="flex items-center gap-2 rounded-2xl border border-black/10 bg-zinc-50 px-4 py-3 transition focus-within:border-zinc-950 focus-within:bg-white">
                 <UserRound size={18} className="text-zinc-400" />
                 <input
@@ -237,6 +249,7 @@ export default function ProfilePage() {
                   className="w-full bg-transparent text-sm outline-none"
                 />
               </div>
+
               <p className="mt-2 text-xs font-medium text-zinc-400">
                 This is the only required field.
               </p>
@@ -244,6 +257,7 @@ export default function ProfilePage() {
 
             <label className="block">
               <span className="mb-2 block text-sm font-black">Region</span>
+
               <div className="flex items-center gap-2 rounded-2xl border border-black/10 bg-zinc-50 px-4 py-3 transition focus-within:border-zinc-950 focus-within:bg-white">
                 <MapPin size={18} className="text-zinc-400" />
                 <input
@@ -259,6 +273,7 @@ export default function ProfilePage() {
 
             <label className="block">
               <span className="mb-2 block text-sm font-black">Job</span>
+
               <div className="flex items-center gap-2 rounded-2xl border border-black/10 bg-zinc-50 px-4 py-3 transition focus-within:border-zinc-950 focus-within:bg-white">
                 <Briefcase size={18} className="text-zinc-400" />
                 <input
@@ -272,35 +287,45 @@ export default function ProfilePage() {
               </div>
             </label>
 
-            <label className="block">
-              <span className="mb-2 block text-sm font-black">Disability status</span>
-              <select
-                value={form.disability_status}
-                onChange={(e) => updateField("disability_status", e.target.value)}
-                className="w-full rounded-2xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-950 focus:bg-white"
-              >
-                {disabilityOptions.map((option) => (
-                  <option key={option.value || "empty"} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-2 block text-sm font-black">
+                  Disability status
+                </span>
 
-            <label className="block">
-              <span className="mb-2 block text-sm font-black">Approximate age range</span>
-              <select
-                value={form.age_range}
-                onChange={(e) => updateField("age_range", e.target.value)}
-                className="w-full rounded-2xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-950 focus:bg-white"
-              >
-                {ageRangeOptions.map((option) => (
-                  <option key={option.value || "empty"} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <select
+                  value={form.disability_status}
+                  onChange={(e) =>
+                    updateField("disability_status", e.target.value)
+                  }
+                  className="w-full rounded-2xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-950 focus:bg-white"
+                >
+                  {disabilityOptions.map((option) => (
+                    <option key={option.value || "empty"} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-black">
+                  Approximate age range
+                </span>
+
+                <select
+                  value={form.age_range}
+                  onChange={(e) => updateField("age_range", e.target.value)}
+                  className="w-full rounded-2xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-950 focus:bg-white"
+                >
+                  {ageRangeOptions.map((option) => (
+                    <option key={option.value || "empty"} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
             {message && (
               <div
@@ -320,7 +345,11 @@ export default function ProfilePage() {
               disabled={!canSave}
               className="flex w-full items-center justify-center gap-2 rounded-full bg-zinc-950 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
             >
-              {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+              {saving ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                <Save size={18} />
+              )}
               Save profile
             </button>
           </form>
