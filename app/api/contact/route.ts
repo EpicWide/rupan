@@ -4,6 +4,15 @@ import nodemailer from "nodemailer";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -19,10 +28,24 @@ export async function POST(req: Request) {
       );
     }
 
+    if (message.length < 10) {
+      return NextResponse.json(
+        { error: "Message must be at least 10 characters." },
+        { status: 400 }
+      );
+    }
+
+    if (message.length > 3000) {
+      return NextResponse.json(
+        { error: "Message is too long." },
+        { status: 400 }
+      );
+    }
+
     const smtpUser = process.env.GMAIL_SMTP_USER;
-    const smtpPassword = process.env.GMAIL_SMTP_APP_PASSWORD;
+    const smtpPassword = process.env.GMAIL_SMTP_APP_PASSWORD?.replace(/\s/g, "");
     const toEmail = process.env.CONTACT_TO_EMAIL || smtpUser;
-    const fromName = process.env.GMAIL_SMTP_FROM_NAME || "Rupan";
+    const fromName = process.env.GMAIL_SMTP_FROM_NAME || "Lupin";
 
     if (!smtpUser || !smtpPassword || !toEmail) {
       return NextResponse.json(
@@ -46,9 +69,9 @@ export async function POST(req: Request) {
       from: `"${fromName}" <${smtpUser}>`,
       to: toEmail,
       replyTo: email,
-      subject: `New Rupan contact message${name ? ` from ${name}` : ""}`,
+      subject: `New Lupin contact message${name ? ` from ${name}` : ""}`,
       text: `
-New Rupan contact message
+New Lupin contact message
 
 Name: ${name || "Not provided"}
 Email: ${email}
@@ -58,39 +81,37 @@ ${message}
       `.trim(),
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-          <h2>New Rupan contact message</h2>
+          <h2>New Lupin contact message</h2>
           <p><strong>Name:</strong> ${escapeHtml(name || "Not provided")}</p>
           <p><strong>Email:</strong> ${escapeHtml(email)}</p>
           <hr />
           <p style="white-space: pre-wrap;">${escapeHtml(message)}</p>
+          <hr />
+          <p style="font-size: 12px; color: #666;">
+            Lupin requires truthful, good-faith communication. Preserve this email if it relates to safety, abuse, or legal concerns.
+          </p>
         </div>
       `,
     });
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    console.error("Rupan contact email error:", {
+    console.error("Lupin contact email error:", {
       message: error?.message,
       code: error?.code,
       command: error?.command,
       response: error?.response,
+      responseCode: error?.responseCode,
     });
 
     return NextResponse.json(
       {
         error: error?.message || "Failed to send contact message.",
         code: error?.code || null,
+        response: error?.response || null,
+        responseCode: error?.responseCode || null,
       },
       { status: 500 }
     );
   }
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
