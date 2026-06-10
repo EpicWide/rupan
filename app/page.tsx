@@ -11,6 +11,7 @@ import {
   MessageCircle,
   Plus,
   Scale,
+  Search,
   Send,
   UserPlus,
   X,
@@ -47,12 +48,6 @@ type UserState = {
   name: string;
 };
 
-const reactionLabels: Record<ReactionType, string> = {
-  cheer_up: "힘내세요",
-  support_you: "응원합니다",
-  lawsuit_support: "소송지원하고 싶어요",
-};
-
 export default function RupanHomePage() {
   const [user, setUser] = useState<UserState | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -76,10 +71,28 @@ export default function RupanHomePage() {
   const [message, setMessage] = useState("");
   const [posts, setPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const canPost = useMemo(() => {
-    return postTitle.trim().length > 0 && (postText.trim().length > 0 || Boolean(imageFile));
+    return (
+      postTitle.trim().length > 0 &&
+      (postText.trim().length > 0 || Boolean(imageFile))
+    );
   }, [postTitle, postText, imageFile]);
+
+  const filteredPosts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+
+    if (!q) return posts;
+
+    return posts.filter((post) => {
+      return (
+        post.title.toLowerCase().includes(q) ||
+        (post.body || "").toLowerCase().includes(q) ||
+        post.author_nickname.toLowerCase().includes(q)
+      );
+    });
+  }, [posts, searchQuery]);
 
   const loadUnreadDmCount = useCallback(async (userId: string) => {
     const { count } = await supabaseBrowser
@@ -101,61 +114,64 @@ export default function RupanHomePage() {
     return data?.nickname || fallback;
   };
 
-  const loadPosts = useCallback(
-    async (currentUserId?: string) => {
-      setLoadingPosts(true);
+  const loadPosts = useCallback(async (currentUserId?: string) => {
+    setLoadingPosts(true);
 
-      const { data: postRows, error } = await supabaseBrowser
-        .from("rupan_posts")
-        .select("id, author_id, author_nickname, title, body, image_url, created_at")
-        .order("created_at", { ascending: false })
-        .limit(50);
+    const { data: postRows, error } = await supabaseBrowser
+      .from("rupan_posts")
+      .select("id, author_id, author_nickname, title, body, image_url, created_at")
+      .order("created_at", { ascending: false })
+      .limit(80);
 
-      if (error || !postRows) {
-        setPosts([]);
-        setLoadingPosts(false);
-        return;
-      }
+    if (error || !postRows) {
+      setPosts([]);
+      setLoadingPosts(false);
+      return;
+    }
 
-      const ids = postRows.map((p) => p.id);
+    const ids = postRows.map((p) => p.id);
 
-      const { data: reactions } = await supabaseBrowser
-        .from("rupan_post_reactions")
-        .select("post_id, user_id, reaction_type")
-        .in("post_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
+    const { data: reactions } = await supabaseBrowser
+      .from("rupan_post_reactions")
+      .select("post_id, user_id, reaction_type")
+      .in(
+        "post_id",
+        ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]
+      );
 
-      const enriched: Post[] = postRows.map((post) => {
-        const rows = reactions?.filter((r) => r.post_id === post.id) ?? [];
+    const enriched: Post[] = postRows.map((post) => {
+      const rows = reactions?.filter((r) => r.post_id === post.id) ?? [];
 
-        const reactionCounts: Record<ReactionType, number> = {
-          cheer_up: 0,
-          support_you: 0,
-          lawsuit_support: 0,
-        };
+      const reactionCounts: Record<ReactionType, number> = {
+        cheer_up: 0,
+        support_you: 0,
+        lawsuit_support: 0,
+      };
 
-        let myReaction: ReactionType | null = null;
+      let myReaction: ReactionType | null = null;
 
-        rows.forEach((r) => {
-          const type = r.reaction_type as ReactionType;
+      rows.forEach((r) => {
+        const type = r.reaction_type as ReactionType;
+
+        if (type in reactionCounts) {
           reactionCounts[type] += 1;
+        }
 
-          if (currentUserId && r.user_id === currentUserId) {
-            myReaction = type;
-          }
-        });
-
-        return {
-          ...post,
-          reactionCounts,
-          myReaction,
-        };
+        if (currentUserId && r.user_id === currentUserId) {
+          myReaction = type;
+        }
       });
 
-      setPosts(enriched);
-      setLoadingPosts(false);
-    },
-    []
-  );
+      return {
+        ...post,
+        reactionCounts,
+        myReaction,
+      };
+    });
+
+    setPosts(enriched);
+    setLoadingPosts(false);
+  }, []);
 
   const loadSession = useCallback(async () => {
     try {
@@ -176,13 +192,12 @@ export default function RupanHomePage() {
 
       const nickname = await getNickname(sessionUser.id, fallback);
 
-      const nextUser = {
+      setUser({
         id: sessionUser.id,
         email: sessionUser.email ?? null,
         name: nickname,
-      };
+      });
 
-      setUser(nextUser);
       await loadUnreadDmCount(sessionUser.id);
       await loadPosts(sessionUser.id);
     } catch {
@@ -196,35 +211,37 @@ export default function RupanHomePage() {
   useEffect(() => {
     loadSession();
 
-    const { data } = supabaseBrowser.auth.onAuthStateChange(async (_event, session) => {
-      const sessionUser = session?.user;
+    const { data } = supabaseBrowser.auth.onAuthStateChange(
+      async (_event, session) => {
+        const sessionUser = session?.user;
 
-      if (!sessionUser) {
-        setUser(null);
-        setUnreadDmCount(0);
+        if (!sessionUser) {
+          setUser(null);
+          setUnreadDmCount(0);
+          setAuthLoading(false);
+          await loadPosts();
+          return;
+        }
+
+        const fallback =
+          sessionUser.user_metadata?.full_name ||
+          sessionUser.user_metadata?.name ||
+          sessionUser.email?.split("@")[0] ||
+          "Rupan User";
+
+        const nickname = await getNickname(sessionUser.id, fallback);
+
+        setUser({
+          id: sessionUser.id,
+          email: sessionUser.email ?? null,
+          name: nickname,
+        });
+
+        await loadUnreadDmCount(sessionUser.id);
+        await loadPosts(sessionUser.id);
         setAuthLoading(false);
-        await loadPosts();
-        return;
       }
-
-      const fallback =
-        sessionUser.user_metadata?.full_name ||
-        sessionUser.user_metadata?.name ||
-        sessionUser.email?.split("@")[0] ||
-        "Rupan User";
-
-      const nickname = await getNickname(sessionUser.id, fallback);
-
-      setUser({
-        id: sessionUser.id,
-        email: sessionUser.email ?? null,
-        name: nickname,
-      });
-
-      await loadUnreadDmCount(sessionUser.id);
-      await loadPosts(sessionUser.id);
-      setAuthLoading(false);
-    });
+    );
 
     return () => {
       data.subscription.unsubscribe();
@@ -240,6 +257,11 @@ export default function RupanHomePage() {
           method: alreadyCounted ? "GET" : "POST",
           cache: "no-store",
         });
+
+        if (!res.ok) {
+          setVisitorCount(null);
+          return;
+        }
 
         const json = await res.json();
 
@@ -264,11 +286,29 @@ export default function RupanHomePage() {
     };
   }, [imagePreview]);
 
+  useEffect(() => {
+    if (!composerOpen && !dmOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setComposerOpen(false);
+        setDmOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [composerOpen, dmOpen]);
+
   const resetComposer = () => {
     setPostTitle("");
     setPostText("");
     setMessage("");
     setImageFile(null);
+
     if (imagePreview) URL.revokeObjectURL(imagePreview);
     setImagePreview(null);
   };
@@ -280,13 +320,13 @@ export default function RupanHomePage() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setMessage("Please upload an image file.");
+      setMessage("Please upload a valid image file.");
       event.target.value = "";
       return;
     }
 
     if (file.size > 8 * 1024 * 1024) {
-      setMessage("Image is too large. Please upload under 8MB.");
+      setMessage("The image is too large. Please upload a file under 8MB.");
       event.target.value = "";
       return;
     }
@@ -322,12 +362,12 @@ export default function RupanHomePage() {
     setMessage("");
 
     if (!user) {
-      setMessage("Please login or sign up before publishing.");
+      setMessage("Please log in or sign up before publishing.");
       return;
     }
 
     if (!canPost) {
-      setMessage("Please add a title and content or photo.");
+      setMessage("Please add a title and either content or a photo.");
       return;
     }
 
@@ -357,7 +397,7 @@ export default function RupanHomePage() {
       setComposerOpen(false);
       await loadPosts(user.id);
     } catch {
-      setMessage("Failed to publish post.");
+      setMessage("Failed to publish the post.");
     } finally {
       setPosting(false);
     }
@@ -365,7 +405,7 @@ export default function RupanHomePage() {
 
   const handleReaction = async (post: Post, reactionType: ReactionType) => {
     if (!user) {
-      alert("Please login or sign up first.");
+      alert("Please log in or sign up first.");
       return;
     }
 
@@ -395,12 +435,12 @@ export default function RupanHomePage() {
 
   const openDm = (post: Post) => {
     if (!user) {
-      alert("Please login or sign up first.");
+      alert("Please log in or sign up first.");
       return;
     }
 
     if (post.author_id === user.id) {
-      alert("You cannot send DM to yourself.");
+      alert("You cannot message yourself.");
       return;
     }
 
@@ -459,28 +499,40 @@ export default function RupanHomePage() {
         onLogout={handleLogout}
       />
 
-      <section className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-black/10 bg-white/90 px-4 py-2 text-xs font-black text-zinc-700 shadow-sm">
-          <Eye size={15} />
-          <span>Visitors</span>
-          <span className="text-zinc-950">
-            {visitorCount === null ? "—" : visitorCount.toLocaleString()}
-          </span>
+      <section className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+        <div className="flex items-center justify-between gap-3">
+          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-black/10 bg-white/90 px-4 py-2 text-xs font-black text-zinc-700 shadow-sm">
+            <Eye size={15} />
+            <span>Visitors</span>
+            <span className="text-zinc-950">
+              {visitorCount === null ? "—" : visitorCount.toLocaleString()}
+            </span>
+          </div>
+
+          {user && (
+            <Link
+              href="/profile"
+              className="inline-flex items-center rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-black text-zinc-700 shadow-sm transition hover:bg-zinc-50 sm:hidden"
+            >
+              Profile
+            </Link>
+          )}
         </div>
 
-        <section className="overflow-hidden rounded-[2rem] border border-black/10 bg-white shadow-sm">
-          <div className="bg-gradient-to-br from-black via-zinc-900 to-zinc-700 px-5 py-5 text-white sm:px-7 sm:py-6">
+        <section className="overflow-hidden rounded-[1.5rem] border border-black/10 bg-white shadow-sm">
+          <div className="bg-gradient-to-br from-black via-zinc-900 to-zinc-700 px-5 py-4 text-white sm:px-6 sm:py-5">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/60">
               Rupan
             </p>
 
-            <p className="max-w-3xl text-sm leading-7 text-white/80 sm:text-[15px]">
-              The law may not compensate what you lost. Your boss may be an asshole.
-              HR may be a deeply unfair group. This is a space to protect your life
-              when the people hurting you may be the last ones you expected.
+            <p className="max-w-3xl text-sm leading-7 text-white/85">
+              The law may not compensate what you lost. Your boss may be an
+              asshole. HR may be a deeply unfair group. This is a space to
+              protect your life when the people hurting you may be the last ones
+              you expected.
             </p>
 
-            <div className="mt-4">
+            <div className="mt-3">
               {user ? (
                 <div className="inline-flex max-w-full items-center rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/85 ring-1 ring-white/15">
                   Logged in as&nbsp;
@@ -488,104 +540,122 @@ export default function RupanHomePage() {
                 </div>
               ) : (
                 <div className="inline-flex max-w-full items-center rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/85 ring-1 ring-white/15">
-                  Login or sign up to publish.
+                  Log in or sign up to publish.
                 </div>
               )}
             </div>
           </div>
         </section>
 
-        <section className="space-y-4">
-          <div>
-            <h2 className="text-xl font-black tracking-tight sm:text-2xl">
-              Published posts
-            </h2>
-            <p className="mt-1 text-sm font-medium text-zinc-500">
-              The newest published posts appear first.
-            </p>
+        <section className="sticky top-[4.75rem] z-20 rounded-[1.5rem] border border-black/10 bg-[#f7f4ef]/85 p-2 shadow-sm backdrop-blur-xl">
+          <div className="flex items-center gap-3 rounded-[1.25rem] border border-black/10 bg-white px-4 py-3 shadow-sm transition focus-within:border-zinc-950">
+            <Search size={18} className="shrink-0 text-zinc-400" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search stories, authors, or keywords"
+              className="w-full bg-transparent text-sm font-semibold outline-none placeholder:text-zinc-400"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 transition hover:bg-zinc-200"
+                aria-label="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
+        </section>
 
+        <section className="space-y-4">
           {loadingPosts ? (
-            <div className="rounded-[2rem] border border-black/10 bg-white p-10 text-center">
+            <div className="rounded-[2rem] border border-black/10 bg-white p-10 text-center shadow-sm">
               <Loader2 className="mx-auto animate-spin text-zinc-400" />
               <p className="mt-3 text-sm font-bold text-zinc-500">Loading posts...</p>
             </div>
-          ) : posts.length === 0 ? (
+          ) : filteredPosts.length === 0 ? (
             <div className="rounded-[2rem] border border-dashed border-black/15 bg-white/70 p-10 text-center">
-              <p className="text-base font-black text-zinc-600">
-                No published posts yet.
-              </p>
+              <p className="text-base font-black text-zinc-600">No posts found.</p>
               <p className="mt-2 text-sm text-zinc-500">
-                Tap the + button to publish the first Rupan post.
+                Try another keyword or tap the + button to publish.
               </p>
             </div>
           ) : (
-            posts.map((post, index) => (
+            filteredPosts.map((post, index) => (
               <article
                 key={post.id}
-                className={`overflow-hidden rounded-[2rem] border bg-white shadow-sm ${
-                  index === 0 ? "border-zinc-950/15 ring-1 ring-zinc-950/5" : "border-black/10"
+                className={`overflow-hidden rounded-[2rem] border bg-white shadow-sm transition ${
+                  index === 0
+                    ? "border-zinc-950/15 ring-1 ring-zinc-950/5"
+                    : "border-black/10 hover:border-black/15"
                 }`}
               >
                 {index === 0 && (
-                  <div className="border-b border-black/5 bg-zinc-950 px-5 py-2 text-xs font-black uppercase tracking-[0.25em] text-white/80">
+                  <div className="border-b border-black/5 bg-zinc-950 px-5 py-2 text-[11px] font-black uppercase tracking-[0.25em] text-white/80">
                     Latest published
                   </div>
                 )}
 
-                <div className="flex items-center gap-3 px-5 py-4">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-sm font-black text-white">
-                    {post.author_nickname.slice(0, 1).toUpperCase()}
+                <div className="px-5 py-5 sm:px-6">
+                  <div className="mb-5 flex items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-sm font-black text-white shadow-sm">
+                      {post.author_nickname.slice(0, 1).toUpperCase()}
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black">
+                        {post.author_nickname}
+                      </p>
+                      <p className="text-xs font-medium text-zinc-400">
+                        {new Date(post.created_at).toLocaleString()}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black">{post.author_nickname}</p>
-                    <p className="text-xs text-zinc-500">
-                      {new Date(post.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="px-5 pb-5">
-                  <h3 className="text-xl font-black tracking-tight text-zinc-950">
+                  <h3 className="text-2xl font-black tracking-tight text-zinc-950">
                     {post.title}
                   </h3>
 
                   {post.body && (
-                    <p className="mt-3 whitespace-pre-wrap text-[15px] leading-7 text-zinc-700">
+                    <p className="mt-4 whitespace-pre-wrap text-[15px] leading-8 text-zinc-700">
                       {post.body}
                     </p>
                   )}
                 </div>
 
                 {post.image_url && (
-                  <Image
-                    src={post.image_url}
-                    alt={post.title}
-                    width={1400}
-                    height={900}
-                    className="w-full object-cover"
-                  />
+                  <div className="border-y border-black/5 bg-zinc-100">
+                    <Image
+                      src={post.image_url}
+                      alt={post.title}
+                      width={1400}
+                      height={900}
+                      className="max-h-[620px] w-full object-cover"
+                    />
+                  </div>
                 )}
 
-                <div className="border-t border-black/10 px-4 py-4">
+                <div className="border-t border-black/10 bg-zinc-50/70 px-4 py-4">
                   <div className="grid gap-2 sm:grid-cols-4">
                     <ReactionButton
-                      label="힘내세요"
+                      label="Stay strong"
                       count={post.reactionCounts.cheer_up}
                       active={post.myReaction === "cheer_up"}
                       onClick={() => handleReaction(post, "cheer_up")}
                     />
 
                     <ReactionButton
-                      label="응원합니다"
+                      label="I support you"
                       count={post.reactionCounts.support_you}
                       active={post.myReaction === "support_you"}
                       onClick={() => handleReaction(post, "support_you")}
                     />
 
                     <ReactionButton
-                      label="소송지원하고 싶어요"
+                      label="Support lawsuit"
                       count={post.reactionCounts.lawsuit_support}
                       active={post.myReaction === "lawsuit_support"}
                       onClick={() => handleReaction(post, "lawsuit_support")}
@@ -597,7 +667,7 @@ export default function RupanHomePage() {
                       className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-3 text-sm font-black shadow-sm transition hover:bg-zinc-50"
                     >
                       <MessageCircle size={17} />
-                      DM
+                      Message
                     </button>
                   </div>
                 </div>
@@ -659,18 +729,20 @@ function ReactionButton({
   active: boolean;
   onClick: () => void;
 }) {
+  const lawsuit = label.toLowerCase().includes("lawsuit");
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-black shadow-sm transition ${
+      className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-black shadow-sm transition ${
         active
           ? "bg-zinc-950 text-white"
           : "border border-black/10 bg-white text-zinc-950 hover:bg-zinc-50"
       }`}
     >
-      {label.includes("소송") ? <Scale size={17} /> : <HeartHandshake size={17} />}
-      <span>{label}</span>
+      {lawsuit ? <Scale size={17} /> : <HeartHandshake size={17} />}
+      <span className="text-center leading-tight">{label}</span>
       <span className={active ? "text-white/80" : "text-zinc-400"}>{count}</span>
     </button>
   );
@@ -700,7 +772,7 @@ function Header({
           <div className="min-w-0 leading-tight">
             <p className="truncate text-lg font-black tracking-tight">Rupan</p>
             <p className="hidden text-xs font-semibold text-zinc-500 sm:block">
-              Simple social page
+              For protecting your dignity
             </p>
           </div>
         </Link>
@@ -709,7 +781,7 @@ function Header({
           <button
             type="button"
             aria-label="Notifications"
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-zinc-900 shadow-sm"
+            className="hidden h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-zinc-900 shadow-sm sm:flex"
           >
             <Bell size={18} />
           </button>
@@ -748,7 +820,7 @@ function Header({
                 className="flex items-center gap-2 rounded-full bg-zinc-950 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-zinc-800"
               >
                 <LogIn size={16} />
-                Login
+                Log in
               </Link>
             </>
           ) : (
@@ -771,7 +843,7 @@ function Header({
                 ) : (
                   <LogOut size={16} />
                 )}
-                <span className="hidden sm:inline">Logout</span>
+                <span className="hidden sm:inline">Log out</span>
                 <span className="sm:hidden">Out</span>
               </button>
             </>
@@ -837,7 +909,7 @@ function ComposerModal({
         <form onSubmit={onSubmit} className="space-y-4 px-5 py-5 sm:px-6 sm:py-6">
           {!user && (
             <div className="rounded-2xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm font-bold text-zinc-700">
-              Please login or sign up before publishing.
+              Please log in or sign up before publishing.
             </div>
           )}
 
@@ -895,7 +967,12 @@ function ComposerModal({
             <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-black shadow-sm">
               <ImagePlus size={18} />
               Upload photo
-              <input type="file" accept="image/*" onChange={onImageChange} className="hidden" />
+              <input
+                type="file"
+                accept="image/*"
+                onChange={onImageChange}
+                className="hidden"
+              />
             </label>
 
             <div className="flex items-center gap-3">
@@ -946,7 +1023,7 @@ function DmModal({
       >
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-black">Send DM</h3>
+            <h3 className="text-lg font-black">Send message</h3>
             <p className="mt-1 text-sm text-zinc-500">To {targetName}</p>
           </div>
 
@@ -973,7 +1050,7 @@ function DmModal({
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-zinc-950 px-5 py-3 text-sm font-black text-white disabled:bg-zinc-300"
         >
           {sending ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
-          Send DM
+          Send
         </button>
       </form>
     </div>
@@ -1001,7 +1078,12 @@ function Footer() {
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-950 text-sm font-black text-white">
             R
           </div>
-          <p className="font-black">Rupan</p>
+          <div>
+            <p className="font-black">Rupan</p>
+            <p className="text-xs font-semibold text-zinc-500">
+              For protecting your dignity
+            </p>
+          </div>
         </div>
 
         <nav className="flex flex-wrap gap-x-5 gap-y-3 text-sm font-bold text-zinc-600">
