@@ -34,7 +34,7 @@ function AuthCallbackInner() {
         });
       }
 
-      router.replace("/");
+      router.replace("/profile");
       router.refresh();
     };
 
@@ -52,11 +52,9 @@ function CallbackLoading() {
           R
         </div>
 
-        <div className="mx-auto mb-4 flex justify-center">
-          <Loader2 className="animate-spin text-zinc-500" size={22} />
-        </div>
+        <Loader2 className="mx-auto animate-spin text-zinc-500" size={24} />
 
-        <h1 className="text-xl font-black">Signing you in...</h1>
+        <h1 className="mt-4 text-xl font-black">Signing you in...</h1>
         <p className="mt-2 text-sm text-zinc-500">Please wait a moment.</p>
       </div>
     </main>
