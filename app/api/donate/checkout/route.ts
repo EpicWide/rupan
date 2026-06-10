@@ -18,14 +18,17 @@ export async function POST(req: Request) {
 
     if (!stripeSecretKey) {
       return NextResponse.json(
-        { error: "Missing STRIPE_SECRET_KEY on Cloud Run." },
+        { error: "Missing STRIPE_SECRET_KEY on the server." },
         { status: 500 }
       );
     }
 
     if (!stripeSecretKey.startsWith("sk_")) {
       return NextResponse.json(
-        { error: "Invalid STRIPE_SECRET_KEY format. It must start with sk_test_ or sk_live_." },
+        {
+          error:
+            "Invalid STRIPE_SECRET_KEY format. It must start with sk_test_ or sk_live_.",
+        },
         { status: 500 }
       );
     }
@@ -38,7 +41,7 @@ export async function POST(req: Request) {
     const donorName = String(body.name || "").trim();
     const donorEmail = String(body.email || "").trim();
 
-    if (!amount || amount < 1) {
+    if (!Number.isFinite(amount) || amount < 1) {
       return NextResponse.json(
         { error: "Donation amount must be at least $1." },
         { status: 400 }
@@ -58,9 +61,12 @@ export async function POST(req: Request) {
       mode: "payment",
       submit_type: "donate",
       payment_method_types: ["card"],
+
       customer_email: donorEmail || undefined,
+
       success_url: `${appUrl}/donate/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/donate?canceled=1`,
+
       line_items: [
         {
           quantity: 1,
@@ -70,41 +76,40 @@ export async function POST(req: Request) {
             product_data: {
               name: "Lupin Donation",
               description:
-                "Support people facing difficult situations and help change the world, even a little.",
+                "Support people facing difficult situations and help protect their dignity.",
             },
           },
         },
       ],
+
       metadata: {
-        donor_name: donorName,
+        donor_name: donorName || "Anonymous",
         donor_email: donorEmail,
-        source: "rupan_donate_page",
+        source: "lupin_donate_page",
       },
     });
 
     if (!session.url) {
       return NextResponse.json(
-        { error: "Stripe did not return a checkout URL." },
+        { error: "Stripe did not return a Checkout URL." },
         { status: 500 }
       );
     }
 
     return NextResponse.json({ url: session.url });
-  } catch (error: any) {
-    console.error("Stripe donation checkout error:", {
-      message: error?.message,
-      type: error?.type,
-      code: error?.code,
-      statusCode: error?.statusCode,
-      requestId: error?.requestId,
+  } catch (error: unknown) {
+    const stripeError =
+      error instanceof Error
+        ? error
+        : new Error("Failed to create donation checkout.");
+
+    console.error("Lupin donation checkout error:", {
+      message: stripeError.message,
     });
 
     return NextResponse.json(
       {
-        error: error?.message || "Failed to create donation checkout.",
-        type: error?.type || null,
-        code: error?.code || null,
-        statusCode: error?.statusCode || null,
+        error: stripeError.message || "Failed to create donation checkout.",
       },
       { status: 500 }
     );
