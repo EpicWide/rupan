@@ -8,7 +8,7 @@ function getAppUrl() {
   return (
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.APP_URL ||
-    "http://localhost:3000"
+    "https://rupan-502944581274.europe-west1.run.app"
   ).replace(/\/$/, "");
 }
 
@@ -18,10 +18,14 @@ export async function POST(req: Request) {
 
     if (!stripeSecretKey) {
       return NextResponse.json(
-        {
-          error:
-            "Stripe is not configured yet. Missing STRIPE_SECRET_KEY on the server.",
-        },
+        { error: "Missing STRIPE_SECRET_KEY on Cloud Run." },
+        { status: 500 }
+      );
+    }
+
+    if (!stripeSecretKey.startsWith("sk_")) {
+      return NextResponse.json(
+        { error: "Invalid STRIPE_SECRET_KEY format. It must start with sk_test_ or sk_live_." },
         { status: 500 }
       );
     }
@@ -78,12 +82,30 @@ export async function POST(req: Request) {
       },
     });
 
+    if (!session.url) {
+      return NextResponse.json(
+        { error: "Stripe did not return a checkout URL." },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ url: session.url });
-  } catch (error) {
-    console.error("Stripe donation checkout error:", error);
+  } catch (error: any) {
+    console.error("Stripe donation checkout error:", {
+      message: error?.message,
+      type: error?.type,
+      code: error?.code,
+      statusCode: error?.statusCode,
+      requestId: error?.requestId,
+    });
 
     return NextResponse.json(
-      { error: "Failed to create donation checkout." },
+      {
+        error: error?.message || "Failed to create donation checkout.",
+        type: error?.type || null,
+        code: error?.code || null,
+        statusCode: error?.statusCode || null,
+      },
       { status: 500 }
     );
   }
