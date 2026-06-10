@@ -251,29 +251,44 @@ export default function RupanHomePage() {
   }, [loadSession, loadPosts, loadUnreadDmCount]);
 
   useEffect(() => {
+    let alive = true;
+
     const countVisitor = async () => {
       try {
         const res = await fetch("/api/rupan/visitors", {
           method: "POST",
           cache: "no-store",
+          headers: {
+            "Content-Type": "application/json",
+          },
         });
 
+        const json = await res.json();
+
+        if (!alive) return;
+
         if (!res.ok) {
+          console.error("Visitor count failed:", json);
           setVisitorCount(null);
           return;
         }
 
-        const json = await res.json();
-
         if (typeof json.total === "number") {
           setVisitorCount(json.total);
+        } else {
+          setVisitorCount(null);
         }
-      } catch {
-        setVisitorCount(null);
+      } catch (error) {
+        console.error("Visitor count request failed:", error);
+        if (alive) setVisitorCount(null);
       }
     };
 
     countVisitor();
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
   useEffect(() => {
