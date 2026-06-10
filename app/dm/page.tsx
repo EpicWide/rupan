@@ -7,6 +7,7 @@ import {
   MessageCircle,
   RefreshCw,
   Send,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -41,7 +42,7 @@ export default function DmPage() {
   const [replyTo, setReplyTo] = useState<MessageRow | null>(null);
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
-  const [message, setMessage] = useState("");
+  const [notice, setNotice] = useState("");
 
   const sortedMessages = useMemo(() => {
     return [...messages].sort(
@@ -69,7 +70,7 @@ export default function DmPage() {
   };
 
   const loadMessages = async (markRead = true) => {
-    setMessage("");
+    setNotice("");
 
     try {
       const { data: sessionData } = await supabaseBrowser.auth.getSession();
@@ -81,10 +82,11 @@ export default function DmPage() {
       }
 
       const fallback =
+        sessionUser.user_metadata?.nickname ||
         sessionUser.user_metadata?.full_name ||
         sessionUser.user_metadata?.name ||
         sessionUser.email?.split("@")[0] ||
-        "Rupan User";
+        "Lupin User";
 
       const nickname = await getNickname(sessionUser.id, fallback);
 
@@ -100,10 +102,10 @@ export default function DmPage() {
         )
         .or(`sender_id.eq.${sessionUser.id},recipient_id.eq.${sessionUser.id}`)
         .order("created_at", { ascending: false })
-        .limit(100);
+        .limit(120);
 
       if (error) {
-        setMessage(error.message);
+        setNotice(error.message);
         setMessages([]);
         return;
       }
@@ -118,7 +120,7 @@ export default function DmPage() {
           .is("read_at", null);
       }
     } catch {
-      setMessage("Failed to load direct messages.");
+      setNotice("Failed to load direct messages.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -129,6 +131,21 @@ export default function DmPage() {
     loadMessages(true);
   }, []);
 
+  useEffect(() => {
+    if (!replyTo) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setReplyTo(null);
+        setReplyText("");
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [replyTo]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadMessages(false);
@@ -136,7 +153,7 @@ export default function DmPage() {
 
   const sendReply = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setMessage("");
+    setNotice("");
 
     if (!user || !replyTo || !replyText.trim()) return;
 
@@ -160,7 +177,7 @@ export default function DmPage() {
       });
 
       if (error) {
-        setMessage(error.message);
+        setNotice(error.message);
         return;
       }
 
@@ -168,7 +185,7 @@ export default function DmPage() {
       setReplyTo(null);
       await loadMessages(false);
     } catch {
-      setMessage("Failed to send your reply.");
+      setNotice("Failed to send your reply.");
     } finally {
       setSending(false);
     }
@@ -179,7 +196,7 @@ export default function DmPage() {
       <main className="flex min-h-screen items-center justify-center bg-[#f7f4ef] px-4">
         <div className="rounded-[2rem] border border-black/10 bg-white p-8 text-center shadow-sm">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-950 text-xl font-black text-white">
-            R
+            L
           </div>
           <Loader2 className="mx-auto animate-spin text-zinc-500" size={24} />
           <p className="mt-4 text-sm font-bold text-zinc-500">
@@ -223,12 +240,16 @@ export default function DmPage() {
               <MessageCircle size={24} />
             </div>
 
-            <h1 className="text-3xl font-black tracking-tight">
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/55">
+              Lupin
+            </p>
+
+            <h1 className="mt-3 text-3xl font-black tracking-tight">
               Direct messages
             </h1>
 
             <p className="mt-3 text-sm leading-6 text-white/75">
-              Private conversations between Rupan users.
+              Private conversations between Lupin users.
             </p>
 
             <div className="mt-4 inline-flex rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/85 ring-1 ring-white/15">
@@ -237,11 +258,26 @@ export default function DmPage() {
                 : "No unread messages"}
             </div>
           </div>
+
+          <div className="border-t border-black/10 bg-zinc-50 p-5">
+            <div className="flex gap-3 rounded-[1.5rem] border border-black/10 bg-white p-4">
+              <ShieldCheck
+                size={22}
+                className="mt-0.5 shrink-0 text-zinc-500"
+              />
+              <p className="text-sm leading-6 text-zinc-600">
+                Use direct messages responsibly. Do not send threats,
+                harassment, false accusations, private information about others,
+                or unlawful content. Lupin may preserve records and take action
+                when necessary.
+              </p>
+            </div>
+          </div>
         </div>
 
-        {message && (
+        {notice && (
           <div className="rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-bold text-zinc-700 shadow-sm">
-            {message}
+            {notice}
           </div>
         )}
 
@@ -267,7 +303,9 @@ export default function DmPage() {
                 <article
                   key={msg.id}
                   className={`rounded-[2rem] border bg-white p-5 shadow-sm ${
-                    isMine ? "border-black/10" : "border-zinc-950/15"
+                    isMine
+                      ? "border-black/10"
+                      : "border-zinc-950/15 ring-1 ring-zinc-950/5"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -286,7 +324,7 @@ export default function DmPage() {
                       onClick={() => {
                         setReplyTo(msg);
                         setReplyText("");
-                        setMessage("");
+                        setNotice("");
                       }}
                       className="shrink-0 rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-black shadow-sm transition hover:bg-zinc-50"
                     >
@@ -320,7 +358,10 @@ export default function DmPage() {
 
               <button
                 type="button"
-                onClick={() => setReplyTo(null)}
+                onClick={() => {
+                  setReplyTo(null);
+                  setReplyText("");
+                }}
                 className="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-zinc-700 shadow-sm"
                 aria-label="Close"
               >
@@ -339,7 +380,10 @@ export default function DmPage() {
             <div className="mt-4 flex gap-3">
               <button
                 type="button"
-                onClick={() => setReplyTo(null)}
+                onClick={() => {
+                  setReplyTo(null);
+                  setReplyText("");
+                }}
                 className="flex-1 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-black shadow-sm transition hover:bg-zinc-50"
               >
                 Cancel
