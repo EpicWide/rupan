@@ -2,21 +2,32 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-const appUrl =
-  process.env.NEXT_PUBLIC_APP_URL ||
-  process.env.APP_URL ||
-  "http://localhost:3000";
-
-if (!stripeSecretKey) {
-  throw new Error("Missing STRIPE_SECRET_KEY");
+function getAppUrl() {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.APP_URL ||
+    "http://localhost:3000"
+  ).replace(/\/$/, "");
 }
-
-const stripe = new Stripe(stripeSecretKey);
 
 export async function POST(req: Request) {
   try {
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+
+    if (!stripeSecretKey) {
+      return NextResponse.json(
+        {
+          error:
+            "Stripe is not configured yet. Missing STRIPE_SECRET_KEY on the server.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const stripe = new Stripe(stripeSecretKey);
+
     const body = await req.json();
 
     const amount = Math.round(Number(body.amount || 0));
@@ -36,6 +47,8 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    const appUrl = getAppUrl();
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
