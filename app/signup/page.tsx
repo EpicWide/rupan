@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeft,
   Chrome,
   Eye,
   EyeOff,
@@ -73,7 +74,7 @@ export default function SignupPage() {
             agreed_terms: true,
             agreed_privacy: true,
             agreed_terms_at: new Date().toISOString(),
-            app_name: "Rupan",
+            app_name: "Lupin",
           },
         },
       });
@@ -86,9 +87,9 @@ export default function SignupPage() {
       setMessage("Account created. Please check your email if confirmation is required.");
 
       setTimeout(() => {
-        router.replace("/profile");
+        router.replace("/");
         router.refresh();
-      }, 800);
+      }, 700);
     } catch {
       setMessage("Signup failed. Please try again.");
     } finally {
@@ -130,15 +131,25 @@ export default function SignupPage() {
   return (
     <main className="min-h-screen bg-[#f7f4ef] px-4 py-6 text-zinc-950 sm:px-6">
       <section className="mx-auto flex w-full max-w-md flex-col gap-5">
+        <div className="flex items-center justify-between gap-3">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black shadow-sm transition hover:bg-zinc-50"
+          >
+            <ArrowLeft size={16} />
+            Home
+          </Link>
+        </div>
+
         <Link href="/" className="inline-flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-zinc-950 text-lg font-black text-white shadow-sm">
-            R
+            L
           </div>
 
           <div>
-            <p className="text-xl font-black tracking-tight">Rupan</p>
+            <p className="text-xl font-black tracking-tight">Lupin</p>
             <p className="text-xs font-semibold text-zinc-500">
-              Create your account
+              A righteous outlaw protecting your dignity
             </p>
           </div>
         </Link>
@@ -151,7 +162,7 @@ export default function SignupPage() {
 
             <h1 className="text-3xl font-black tracking-tight">Sign up</h1>
             <p className="mt-2 text-sm leading-6 text-white/75">
-              Join Rupan with Google or email. Agreement to the Terms and Privacy Policy is required.
+              Join Lupin with Google or email. Agreement to the Terms and Privacy Policy is required.
             </p>
           </div>
 
@@ -192,6 +203,7 @@ export default function SignupPage() {
                     }}
                     placeholder="you@example.com"
                     className="w-full bg-transparent text-sm outline-none"
+                    autoComplete="email"
                     required
                   />
                 </div>
@@ -210,6 +222,7 @@ export default function SignupPage() {
                     placeholder="At least 6 characters"
                     minLength={6}
                     className="w-full bg-transparent text-sm outline-none"
+                    autoComplete="new-password"
                     required
                   />
 
@@ -237,7 +250,7 @@ export default function SignupPage() {
                   />
 
                   <span className="text-sm leading-6 text-zinc-600">
-                    I agree to Rupan&apos;s{" "}
+                    I agree to Lupin&apos;s{" "}
                     <Link href="/terms" className="font-black text-zinc-950 underline">
                       Terms of Service
                     </Link>
@@ -257,7 +270,7 @@ export default function SignupPage() {
                   />
 
                   <span className="text-sm leading-6 text-zinc-600">
-                    I agree to Rupan&apos;s{" "}
+                    I agree to Lupin&apos;s{" "}
                     <Link href="/privacy" className="font-black text-zinc-950 underline">
                       Privacy Policy
                     </Link>
@@ -289,7 +302,7 @@ export default function SignupPage() {
             <p className="text-center text-sm text-zinc-500">
               Already have an account?{" "}
               <Link href="/login" className="font-black text-zinc-950 underline">
-                Login
+                Log in
               </Link>
             </p>
           </div>
