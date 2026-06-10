@@ -48,7 +48,10 @@ type UserState = {
   name: string;
 };
 
-export default function RupanHomePage() {
+const BRAND_NAME = "Lupin";
+const BRAND_TAGLINE = "a righteous outlaw protecting your dignity";
+
+export default function LupinHomePage() {
   const [user, setUser] = useState<UserState | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [logoutLoading, setLogoutLoading] = useState(false);
@@ -94,16 +97,6 @@ export default function RupanHomePage() {
     });
   }, [posts, searchQuery]);
 
-  const loadUnreadDmCount = useCallback(async (userId: string) => {
-    const { count } = await supabaseBrowser
-      .from("rupan_messages")
-      .select("id", { count: "exact", head: true })
-      .eq("recipient_id", userId)
-      .is("read_at", null);
-
-    setUnreadDmCount(count ?? 0);
-  }, []);
-
   const getNickname = async (userId: string, fallback: string) => {
     const { data } = await supabaseBrowser
       .from("rupan_profiles")
@@ -113,6 +106,16 @@ export default function RupanHomePage() {
 
     return data?.nickname || fallback;
   };
+
+  const loadUnreadDmCount = useCallback(async (userId: string) => {
+    const { count } = await supabaseBrowser
+      .from("rupan_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("recipient_id", userId)
+      .is("read_at", null);
+
+    setUnreadDmCount(count ?? 0);
+  }, []);
 
   const loadPosts = useCallback(async (currentUserId?: string) => {
     setLoadingPosts(true);
@@ -187,10 +190,11 @@ export default function RupanHomePage() {
       }
 
       const fallback =
+        sessionUser.user_metadata?.nickname ||
         sessionUser.user_metadata?.full_name ||
         sessionUser.user_metadata?.name ||
         sessionUser.email?.split("@")[0] ||
-        "Rupan User";
+        "Lupin User";
 
       const nickname = await getNickname(sessionUser.id, fallback);
 
@@ -226,10 +230,11 @@ export default function RupanHomePage() {
         }
 
         const fallback =
+          sessionUser.user_metadata?.nickname ||
           sessionUser.user_metadata?.full_name ||
           sessionUser.user_metadata?.name ||
           sessionUser.email?.split("@")[0] ||
-          "Rupan User";
+          "Lupin User";
 
         const nickname = await getNickname(sessionUser.id, fallback);
 
@@ -336,8 +341,8 @@ export default function RupanHomePage() {
       return;
     }
 
-    if (file.size > 8 * 1024 * 1024) {
-      setMessage("The image is too large. Please upload a file under 8MB.");
+    if (file.size > 6 * 1024 * 1024) {
+      setMessage("The image is too large. Please upload a file under 6MB.");
       event.target.value = "";
       return;
     }
@@ -533,7 +538,7 @@ export default function RupanHomePage() {
         <section className="overflow-hidden rounded-[1.5rem] border border-black/10 bg-white shadow-sm">
           <div className="bg-gradient-to-br from-black via-zinc-900 to-zinc-700 px-5 py-4 text-white sm:px-6 sm:py-5">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/60">
-              Rupan
+              {BRAND_NAME}
             </p>
 
             <p className="max-w-3xl text-sm leading-7 text-white/85">
@@ -547,7 +552,9 @@ export default function RupanHomePage() {
               {user ? (
                 <div className="inline-flex max-w-full items-center rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/85 ring-1 ring-white/15">
                   Logged in as&nbsp;
-                  <span className="truncate font-black text-white">{user.name}</span>
+                  <span className="truncate font-black text-white">
+                    {user.name}
+                  </span>
                 </div>
               ) : (
                 <div className="inline-flex max-w-full items-center rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/85 ring-1 ring-white/15">
@@ -644,14 +651,16 @@ export default function RupanHomePage() {
                 </div>
 
                 {post.image_url && (
-                  <div className="border-y border-black/5 bg-zinc-100">
-                    <Image
-                      src={post.image_url}
-                      alt={post.title}
-                      width={1400}
-                      height={900}
-                      className="max-h-[620px] w-full object-cover"
-                    />
+                  <div className="border-y border-black/5 bg-zinc-100 px-3 py-3 sm:px-5 sm:py-4">
+                    <div className="flex justify-center overflow-hidden rounded-2xl bg-white">
+                      <Image
+                        src={post.image_url}
+                        alt={post.title}
+                        width={1000}
+                        height={700}
+                        className="h-auto max-h-[320px] w-full object-contain"
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -785,13 +794,15 @@ function Header({
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-950 text-lg font-black text-white shadow-sm">
-            R
+            L
           </div>
 
           <div className="min-w-0 leading-tight">
-            <p className="truncate text-lg font-black tracking-tight">Rupan</p>
+            <p className="truncate text-lg font-black tracking-tight">
+              Lupin
+            </p>
             <p className="hidden text-xs font-semibold text-zinc-500 sm:block">
-              For protecting your dignity
+              Lupin — a righteous outlaw protecting your dignity.
             </p>
           </div>
         </Link>
@@ -927,7 +938,10 @@ function ComposerModal({
           </button>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-4 px-5 py-5 sm:px-6 sm:py-6">
+        <form
+          onSubmit={onSubmit}
+          className="space-y-4 px-5 py-5 sm:px-6 sm:py-6"
+        >
           {!user && (
             <div className="rounded-2xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm font-bold text-zinc-700">
               Please log in or sign up before publishing.
@@ -958,13 +972,13 @@ function ComposerModal({
           />
 
           {imagePreview && (
-            <div className="relative overflow-hidden rounded-3xl border border-black/10 bg-zinc-100">
+            <div className="relative overflow-hidden rounded-3xl border border-black/10 bg-zinc-100 p-3">
               <Image
                 src={imagePreview}
                 alt="Uploaded preview"
-                width={1200}
-                height={800}
-                className="max-h-[420px] w-full object-cover"
+                width={1000}
+                height={700}
+                className="max-h-[280px] w-full object-contain"
               />
 
               <button
@@ -1105,13 +1119,13 @@ function Footer() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-950 text-sm font-black text-white">
-            R
+            L
           </div>
 
           <div>
-            <p className="font-black">Rupan</p>
+            <p className="font-black">Lupin</p>
             <p className="text-xs font-semibold text-zinc-500">
-              For protecting your dignity
+              Lupin — a righteous outlaw protecting your dignity.
             </p>
           </div>
         </div>
@@ -1135,7 +1149,7 @@ function Footer() {
         </nav>
 
         <p className="text-xs text-zinc-400">
-          © {new Date().getFullYear()} Rupan. All rights reserved.
+          © {new Date().getFullYear()} Lupin. All rights reserved.
         </p>
       </div>
     </footer>
