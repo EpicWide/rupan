@@ -119,7 +119,9 @@ export default function RupanHomePage() {
 
     const { data: postRows, error } = await supabaseBrowser
       .from("rupan_posts")
-      .select("id, author_id, author_nickname, title, body, image_url, created_at")
+      .select(
+        "id, author_id, author_nickname, title, body, image_url, created_at"
+      )
       .order("created_at", { ascending: false })
       .limit(80);
 
@@ -251,10 +253,8 @@ export default function RupanHomePage() {
   useEffect(() => {
     const countVisitor = async () => {
       try {
-        const alreadyCounted = sessionStorage.getItem("rupan_visitor_counted");
-
         const res = await fetch("/api/rupan/visitors", {
-          method: alreadyCounted ? "GET" : "POST",
+          method: "POST",
           cache: "no-store",
         });
 
@@ -267,10 +267,6 @@ export default function RupanHomePage() {
 
         if (typeof json.total === "number") {
           setVisitorCount(json.total);
-        }
-
-        if (!alreadyCounted) {
-          sessionStorage.setItem("rupan_visitor_counted", "true");
         }
       } catch {
         setVisitorCount(null);
@@ -550,6 +546,7 @@ export default function RupanHomePage() {
         <section className="sticky top-[4.75rem] z-20 rounded-[1.5rem] border border-black/10 bg-[#f7f4ef]/85 p-2 shadow-sm backdrop-blur-xl">
           <div className="flex items-center gap-3 rounded-[1.25rem] border border-black/10 bg-white px-4 py-3 shadow-sm transition focus-within:border-zinc-950">
             <Search size={18} className="shrink-0 text-zinc-400" />
+
             <input
               type="search"
               value={searchQuery}
@@ -557,6 +554,7 @@ export default function RupanHomePage() {
               placeholder="Search stories, authors, or keywords"
               className="w-full bg-transparent text-sm font-semibold outline-none placeholder:text-zinc-400"
             />
+
             {searchQuery && (
               <button
                 type="button"
@@ -574,11 +572,15 @@ export default function RupanHomePage() {
           {loadingPosts ? (
             <div className="rounded-[2rem] border border-black/10 bg-white p-10 text-center shadow-sm">
               <Loader2 className="mx-auto animate-spin text-zinc-400" />
-              <p className="mt-3 text-sm font-bold text-zinc-500">Loading posts...</p>
+              <p className="mt-3 text-sm font-bold text-zinc-500">
+                Loading posts...
+              </p>
             </div>
           ) : filteredPosts.length === 0 ? (
             <div className="rounded-[2rem] border border-dashed border-black/15 bg-white/70 p-10 text-center">
-              <p className="text-base font-black text-zinc-600">No posts found.</p>
+              <p className="text-base font-black text-zinc-600">
+                No posts found.
+              </p>
               <p className="mt-2 text-sm text-zinc-500">
                 Try another keyword or tap the + button to publish.
               </p>
@@ -743,7 +745,9 @@ function ReactionButton({
     >
       {lawsuit ? <Scale size={17} /> : <HeartHandshake size={17} />}
       <span className="text-center leading-tight">{label}</span>
-      <span className={active ? "text-white/80" : "text-zinc-400"}>{count}</span>
+      <span className={active ? "text-white/80" : "text-zinc-400"}>
+        {count}
+      </span>
     </button>
   );
 }
@@ -890,7 +894,9 @@ function ComposerModal({
       <div className="w-full rounded-t-[2rem] border border-black/10 bg-white shadow-2xl sm:max-w-2xl sm:rounded-[2rem]">
         <div className="flex items-center justify-between border-b border-black/10 px-5 py-4 sm:px-6">
           <div>
-            <h3 className="text-lg font-black tracking-tight">Publish a post</h3>
+            <h3 className="text-lg font-black tracking-tight">
+              Publish a post
+            </h3>
             <p className="mt-1 text-xs font-medium text-zinc-500">
               Add a title, your story, and an optional photo.
             </p>
@@ -989,7 +995,11 @@ function ComposerModal({
                 disabled={!canPost || posting}
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-zinc-950 px-6 py-3 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-zinc-300"
               >
-                {posting ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
+                {posting ? (
+                  <Loader2 size={17} className="animate-spin" />
+                ) : (
+                  <Send size={17} />
+                )}
                 Publish
               </button>
             </div>
@@ -1049,7 +1059,11 @@ function DmModal({
           disabled={!text.trim() || sending}
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-zinc-950 px-5 py-3 text-sm font-black text-white disabled:bg-zinc-300"
         >
-          {sending ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
+          {sending ? (
+            <Loader2 size={17} className="animate-spin" />
+          ) : (
+            <Send size={17} />
+          )}
           Send
         </button>
       </form>
@@ -1078,6 +1092,7 @@ function Footer() {
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-950 text-sm font-black text-white">
             R
           </div>
+
           <div>
             <p className="font-black">Rupan</p>
             <p className="text-xs font-semibold text-zinc-500">
@@ -1087,11 +1102,21 @@ function Footer() {
         </div>
 
         <nav className="flex flex-wrap gap-x-5 gap-y-3 text-sm font-bold text-zinc-600">
-          <Link href="/about" className="hover:text-zinc-950">About</Link>
-          <Link href="/terms" className="hover:text-zinc-950">Terms</Link>
-          <Link href="/privacy" className="hover:text-zinc-950">Privacy</Link>
-          <Link href="/donate" className="hover:text-zinc-950">Donate</Link>
-          <Link href="/contact" className="hover:text-zinc-950">Contact</Link>
+          <Link href="/about" className="hover:text-zinc-950">
+            About
+          </Link>
+          <Link href="/terms" className="hover:text-zinc-950">
+            Terms
+          </Link>
+          <Link href="/privacy" className="hover:text-zinc-950">
+            Privacy
+          </Link>
+          <Link href="/donate" className="hover:text-zinc-950">
+            Donate
+          </Link>
+          <Link href="/contact" className="hover:text-zinc-950">
+            Contact
+          </Link>
         </nav>
 
         <p className="text-xs text-zinc-400">
