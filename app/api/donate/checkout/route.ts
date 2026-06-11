@@ -8,22 +8,35 @@ function getAppUrl() {
   return (
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.APP_URL ||
-    "https://rupan-22151031697.europe-west1.run.app/"
+    "https://newlupin.com"
   ).replace(/\/$/, "");
 }
 
 export async function POST(req: Request) {
   try {
-    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
+
+    console.log("Stripe environment check:", {
+      exists: Boolean(stripeSecretKey),
+      length: stripeSecretKey?.length ?? 0,
+      prefix: stripeSecretKey?.slice(0, 8) ?? "missing",
+      revision: process.env.K_REVISION ?? "unknown",
+    });
 
     if (!stripeSecretKey) {
       return NextResponse.json(
-        { error: "Missing STRIPE_SECRET_KEY on the server." },
+        {
+          error: "Missing STRIPE_SECRET_KEY on the server.",
+          revision: process.env.K_REVISION ?? "unknown",
+        },
         { status: 500 }
       );
     }
 
-    if (!stripeSecretKey.startsWith("sk_")) {
+    if (
+      !stripeSecretKey.startsWith("sk_test_") &&
+      !stripeSecretKey.startsWith("sk_live_")
+    ) {
       return NextResponse.json(
         {
           error:
@@ -34,12 +47,11 @@ export async function POST(req: Request) {
     }
 
     const stripe = new Stripe(stripeSecretKey);
-
     const body = await req.json();
 
-    const amount = Math.round(Number(body.amount || 0));
-    const donorName = String(body.name || "").trim();
-    const donorEmail = String(body.email || "").trim();
+    const amount = Math.round(Number(body.amount));
+    const donorName = String(body.name ?? "").trim();
+    const donorEmail = String(body.email ?? "").trim();
 
     if (!Number.isFinite(amount) || amount < 1) {
       return NextResponse.json(
@@ -61,12 +73,9 @@ export async function POST(req: Request) {
       mode: "payment",
       submit_type: "donate",
       payment_method_types: ["card"],
-
       customer_email: donorEmail || undefined,
-
       success_url: `${appUrl}/donate/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/donate?canceled=1`,
-
       line_items: [
         {
           quantity: 1,
@@ -81,7 +90,6 @@ export async function POST(req: Request) {
           },
         },
       ],
-
       metadata: {
         donor_name: donorName || "Anonymous",
         donor_email: donorEmail,
@@ -98,20 +106,13 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ url: session.url });
   } catch (error: unknown) {
-    const stripeError =
+    const message =
       error instanceof Error
-        ? error
-        : new Error("Failed to create donation checkout.");
+        ? error.message
+        : "Failed to create donation checkout.";
 
-    console.error("Lupin donation checkout error:", {
-      message: stripeError.message,
-    });
+    console.error("Lupin donation checkout error:", { message });
 
-    return NextResponse.json(
-      {
-        error: stripeError.message || "Failed to create donation checkout.",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
