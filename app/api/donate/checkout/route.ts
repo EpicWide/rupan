@@ -8,7 +8,7 @@ function getAppUrl() {
   return (
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.APP_URL ||
-    "https://rupan-502944581274.europe-west1.run.app"
+    "https://rupan-22151031697.europe-west1.run.app/"
   ).replace(/\/$/, "");
 }
 
