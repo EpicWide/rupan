@@ -19,20 +19,20 @@ function getStripe(): Stripe {
   }
 
   if (
-    !secretKey.startsWith("sk_test_") &&
-    !secretKey.startsWith("sk_live_")
+    !secretKey.startsWith("sk_live_") &&
+    !secretKey.startsWith("sk_test_")
   ) {
-    throw new Error("Invalid STRIPE_SECRET_KEY.");
+    throw new Error("Invalid STRIPE_SECRET_KEY format.");
   }
 
   return new Stripe(secretKey);
 }
 
-function normalizeText(value: unknown, maximumLength: number): string {
-  return String(value ?? "").trim().slice(0, maximumLength);
+function cleanText(value: unknown, maxLength: number): string {
+  return String(value ?? "").trim().slice(0, maxLength);
 }
 
-function isValidEmail(email: string): boolean {
+function validEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
@@ -41,8 +41,8 @@ export async function POST(request: Request) {
     const body = (await request.json()) as DonationRequest;
 
     const amount = Number(body.amount);
-    const name = normalizeText(body.name, 100);
-    const email = normalizeText(body.email, 200);
+    const donorName = cleanText(body.name, 100);
+    const donorEmail = cleanText(body.email, 200);
 
     if (!Number.isFinite(amount)) {
       return NextResponse.json(
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (email && !isValidEmail(email)) {
+    if (donorEmail && !validEmail(donorEmail)) {
       return NextResponse.json(
         { error: "Please enter a valid email address." },
         { status: 400 }
@@ -81,11 +81,11 @@ export async function POST(request: Request) {
       currency: "usd",
       payment_method_types: ["card"],
       description: "Lupin Donation",
-      receipt_email: email || undefined,
+      receipt_email: donorEmail || undefined,
 
       metadata: {
-        donor_name: name || "Anonymous",
-        donor_email: email || "",
+        donor_name: donorName || "Anonymous",
+        donor_email: donorEmail || "",
         source: "lupin_embedded_card",
       },
     });
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
     const message =
       error instanceof Error
         ? error.message
-        : "Unable to initialize the donation.";
+        : "Unable to initialize secure payment.";
 
     console.error("Lupin donation PaymentIntent error:", message);
 
