@@ -4,9 +4,9 @@ WORKDIR /app
 
 RUN apk add --no-cache libc6-compat
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json* ./
 
-RUN npm ci
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 
 FROM node:20-alpine AS builder
@@ -45,6 +45,8 @@ RUN addgroup --system --gid 1001 nodejs \
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+RUN mkdir -p ./public
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 USER nextjs
