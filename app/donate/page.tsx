@@ -6,14 +6,14 @@ import {
   HeartHandshake,
   ShieldCheck,
 } from "lucide-react";
-import Link from "next/link";
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import DonationCardForm from "./DonationCardForm";
 
 const publishableKey =
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "";
+  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() || "";
 
 const stripePromise = publishableKey
   ? loadStripe(publishableKey)
@@ -24,16 +24,15 @@ const PRESET_AMOUNTS = [10, 25, 50, 100];
 function normalizeAmount(value: string): number {
   const amount = Number(value);
 
-  if (!Number.isFinite(amount)) {
-    return 0;
-  }
+  if (!Number.isFinite(amount)) return 0;
 
   return Math.round(amount * 100) / 100;
 }
 
 export default function DonatePage() {
   const [amountInput, setAmountInput] = useState("25");
-  const [paymentIntentId, setPaymentIntentId] = useState("");
+  const [completedPaymentId, setCompletedPaymentId] =
+    useState("");
 
   const amount = useMemo(
     () => normalizeAmount(amountInput),
@@ -41,15 +40,16 @@ export default function DonatePage() {
   );
 
   const amountValid = amount >= 1 && amount <= 10000;
-  const completed = Boolean(paymentIntentId);
+  const completed = Boolean(completedPaymentId);
 
   const handleAmountChange = (value: string) => {
     const cleaned = value
       .replace(/[^\d.]/g, "")
-      .replace(/(\..*)\./g, "$1");
+      .replace(/(\..*)\./g, "$1")
+      .slice(0, 9);
 
     setAmountInput(cleaned);
-    setPaymentIntentId("");
+    setCompletedPaymentId("");
   };
 
   return (
@@ -111,7 +111,7 @@ export default function DonatePage() {
                         type="button"
                         onClick={() => {
                           setAmountInput(String(preset));
-                          setPaymentIntentId("");
+                          setCompletedPaymentId("");
                         }}
                         className={`rounded-2xl border px-2 py-3 text-sm font-black transition ${
                           amount === preset
@@ -131,9 +131,7 @@ export default function DonatePage() {
                         : "border-red-300"
                     }`}
                   >
-                    <span className="font-black text-zinc-500">
-                      $
-                    </span>
+                    <span className="font-black text-zinc-500">$</span>
 
                     <input
                       id="donation-amount"
@@ -156,8 +154,7 @@ export default function DonatePage() {
 
                 {!publishableKey && (
                   <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
-                    Stripe is not configured. Missing
-                    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.
+                    Missing NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.
                   </div>
                 )}
 
@@ -165,12 +162,14 @@ export default function DonatePage() {
                   <Elements
                     stripe={stripePromise}
                     options={{
-                      fonts: [],
+                      locale: "en",
                     }}
                   >
                     <DonationCardForm
                       amount={amount}
-                      onSuccess={(id) => setPaymentIntentId(id)}
+                      onSuccess={(paymentIntentId) =>
+                        setCompletedPaymentId(paymentIntentId)
+                      }
                     />
                   </Elements>
                 )}
@@ -182,9 +181,9 @@ export default function DonatePage() {
                   />
 
                   <p className="text-xs leading-6 text-zinc-500">
-                    Payment processing is provided by Stripe. Lupin does
-                    not store complete card numbers or CVC security
-                    codes.
+                    Card information stays inside this Lupin page and is
+                    securely processed by Stripe. Lupin does not store
+                    complete card numbers or CVC codes.
                   </p>
                 </section>
               </>
