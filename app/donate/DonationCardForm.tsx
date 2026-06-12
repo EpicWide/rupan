@@ -5,6 +5,7 @@ import {
   useElements,
   useStripe,
 } from "@stripe/react-stripe-js";
+import type { StripeCardElementOptions } from "@stripe/stripe-js";
 import {
   CheckCircle2,
   CreditCard,
@@ -13,11 +14,7 @@ import {
   Mail,
   UserRound,
 } from "lucide-react";
-import {
-  FormEvent,
-  useMemo,
-  useState,
-} from "react";
+import { FormEvent, useMemo, useState } from "react";
 
 type DonationCardFormProps = {
   amount: number;
@@ -30,7 +27,7 @@ type PaymentIntentResponse = {
   error?: string;
 };
 
-const CARD_OPTIONS = {
+const cardOptions: StripeCardElementOptions = {
   hidePostalCode: false,
 
   style: {
@@ -63,12 +60,13 @@ export default function DonationCardForm({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
 
+  const [cardReady, setCardReady] = useState(false);
   const [cardComplete, setCardComplete] = useState(false);
   const [cardError, setCardError] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
-  const [notice, setNotice] = useState("");
   const [completed, setCompleted] = useState(false);
+  const [notice, setNotice] = useState("");
 
   const emailValid = useMemo(() => {
     if (!email.trim()) return true;
@@ -79,24 +77,25 @@ export default function DonationCardForm({
   const canSubmit =
     Boolean(stripe) &&
     Boolean(elements) &&
-    amount >= 1 &&
-    amount <= 10000 &&
+    cardReady &&
     cardComplete &&
     emailValid &&
+    amount >= 1 &&
+    amount <= 10000 &&
     !submitting &&
     !completed;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!stripe || !elements || !canSubmit) {
-      return;
-    }
+    if (!stripe || !elements || !canSubmit) return;
 
     const cardElement = elements.getElement(CardElement);
 
     if (!cardElement) {
-      setNotice("The secure card form is unavailable. Please refresh the page.");
+      setNotice(
+        "The secure card form is unavailable. Please refresh the page."
+      );
       return;
     }
 
@@ -121,7 +120,8 @@ export default function DonationCardForm({
         }
       );
 
-      const result = (await response.json()) as PaymentIntentResponse;
+      const result =
+        (await response.json()) as PaymentIntentResponse;
 
       if (!response.ok || !result.clientSecret) {
         setNotice(
@@ -135,20 +135,19 @@ export default function DonationCardForm({
         {
           payment_method: {
             card: cardElement,
+
             billing_details: {
               name: name.trim() || undefined,
               email: email.trim() || undefined,
             },
           },
-
-          receipt_email: email.trim() || undefined,
         }
       );
 
       if (confirmation.error) {
         setNotice(
           confirmation.error.message ||
-            "Your payment could not be completed."
+            "Your card payment could not be completed."
         );
         return;
       }
@@ -170,7 +169,7 @@ export default function DonationCardForm({
       if (paymentIntent.status === "processing") {
         setCompleted(true);
         setNotice(
-          "Your payment is processing. Stripe will confirm it shortly."
+          "Your donation is processing. Stripe will confirm it shortly."
         );
         onSuccess(paymentIntent.id);
         return;
@@ -180,7 +179,7 @@ export default function DonationCardForm({
         `Payment status: ${paymentIntent.status}. The donation was not completed.`
       );
     } catch (error) {
-      console.error("Lupin donation confirmation error:", error);
+      console.error("Lupin embedded donation error:", error);
       setNotice("Unable to complete the payment. Please try again.");
     } finally {
       setSubmitting(false);
@@ -264,13 +263,16 @@ export default function DonationCardForm({
       </div>
 
       <section className="rounded-[1.5rem] border border-black/10 bg-zinc-50 p-4 sm:p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <CreditCard size={19} />
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm">
+            <CreditCard size={19} />
+          </div>
 
           <div>
             <h2 className="text-sm font-black">
-              Card information
+              Secure card information
             </h2>
+
             <p className="mt-0.5 text-xs text-zinc-500">
               Card number, expiration date, CVC and ZIP
             </p>
@@ -278,14 +280,15 @@ export default function DonationCardForm({
         </div>
 
         <div
-          className={`rounded-2xl border bg-white px-4 py-4 shadow-sm transition ${
+          className={`rounded-2xl border bg-white px-4 py-5 shadow-sm transition ${
             cardError
               ? "border-red-300"
               : "border-black/10 focus-within:border-zinc-950"
           }`}
         >
           <CardElement
-            options={CARD_OPTIONS}
+            options={cardOptions}
+            onReady={() => setCardReady(true)}
             onChange={(event) => {
               setCardComplete(event.complete);
               setCardError(event.error?.message || "");
@@ -293,6 +296,13 @@ export default function DonationCardForm({
             }}
           />
         </div>
+
+        {!cardReady && (
+          <div className="mt-3 flex items-center gap-2 text-xs font-bold text-zinc-400">
+            <Loader2 size={14} className="animate-spin" />
+            Loading secure card form...
+          </div>
+        )}
 
         {cardError && (
           <p className="mt-3 text-sm font-bold text-red-600">
@@ -358,8 +368,8 @@ export default function DonationCardForm({
       </button>
 
       <p className="text-center text-xs leading-5 text-zinc-400">
-        This is a one-time donation. By selecting Donate, you authorize
-        a charge of <strong>${amount.toFixed(2)}</strong>.
+        This is a one-time donation of{" "}
+        <strong>${amount.toFixed(2)}</strong>.
       </p>
     </form>
   );
