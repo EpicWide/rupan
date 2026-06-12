@@ -5,44 +5,55 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-function getStripe() {
+type DonationRequest = {
+  amount?: unknown;
+  name?: unknown;
+  email?: unknown;
+};
+
+function getStripe(): Stripe {
   const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
 
   if (!secretKey) {
     throw new Error("Missing STRIPE_SECRET_KEY.");
   }
 
-  if (!secretKey.startsWith("sk_test_") && !secretKey.startsWith("sk_live_")) {
-    throw new Error("Invalid STRIPE_SECRET_KEY format.");
+  if (
+    !secretKey.startsWith("sk_test_") &&
+    !secretKey.startsWith("sk_live_")
+  ) {
+    throw new Error("Invalid STRIPE_SECRET_KEY.");
   }
 
   return new Stripe(secretKey);
 }
 
-function normalizeAmount(value: unknown) {
-  const amount = Number(value);
-
-  if (!Number.isFinite(amount)) {
-    return null;
-  }
-
-  return Math.round(amount * 100);
+function normalizeText(value: unknown, maximumLength: number): string {
+  return String(value ?? "").trim().slice(0, maximumLength);
 }
 
-function normalizeText(value: unknown, maxLength: number) {
-  return String(value ?? "").trim().slice(0, maxLength);
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 export async function POST(request: Request) {
   try {
-    const stripe = getStripe();
-    const body = await request.json();
+    const body = (await request.json()) as DonationRequest;
 
-    const amountInCents = normalizeAmount(body.amount);
-    const donorName = normalizeText(body.name, 100);
-    const donorEmail = normalizeText(body.email, 200);
+    const amount = Number(body.amount);
+    const name = normalizeText(body.name, 100);
+    const email = normalizeText(body.email, 200);
 
-    if (!amountInCents || amountInCents < 100) {
+    if (!Number.isFinite(amount)) {
+      return NextResponse.json(
+        { error: "Invalid donation amount." },
+        { status: 400 }
+      );
+    }
+
+    const amountInCents = Math.round(amount * 100);
+
+    if (amountInCents < 100) {
       return NextResponse.json(
         { error: "Donation amount must be at least $1." },
         { status: 400 }
@@ -56,31 +67,26 @@ export async function POST(request: Request) {
       );
     }
 
-    if (
-      donorEmail &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(donorEmail)
-    ) {
+    if (email && !isValidEmail(email)) {
       return NextResponse.json(
         { error: "Please enter a valid email address." },
         { status: 400 }
       );
     }
 
+    const stripe = getStripe();
+
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountInCents,
       currency: "usd",
-
-      // 카드 입력만 표시합니다.
       payment_method_types: ["card"],
-
       description: "Lupin Donation",
-
-      receipt_email: donorEmail || undefined,
+      receipt_email: email || undefined,
 
       metadata: {
-        donor_name: donorName || "Anonymous",
-        donor_email: donorEmail,
-        source: "lupin_embedded_donation",
+        donor_name: name || "Anonymous",
+        donor_email: email || "",
+        source: "lupin_embedded_card",
       },
     });
 
@@ -95,7 +101,7 @@ export async function POST(request: Request) {
       },
       {
         headers: {
-          "Cache-Control": "no-store",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
         },
       }
     );
@@ -103,9 +109,9 @@ export async function POST(request: Request) {
     const message =
       error instanceof Error
         ? error.message
-        : "Failed to initialize the donation payment.";
+        : "Unable to initialize the donation.";
 
-    console.error("Lupin create PaymentIntent error:", message);
+    console.error("Lupin donation PaymentIntent error:", message);
 
     return NextResponse.json(
       {
