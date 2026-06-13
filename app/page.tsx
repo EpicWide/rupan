@@ -488,13 +488,14 @@ setImagePreview(URL.createObjectURL(file));
 
 const uploadImage = async (file: File, userId: string) => {
 const ext = file.name.split(".").pop() || "jpg";
-const random =
-typeof globalThis.crypto !== "undefined" &&
-"randomUUID" in globalThis.crypto
-? globalThis.crypto.randomUUID()
-: `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
 ```
+const random =
+  typeof globalThis.crypto !== "undefined" &&
+  "randomUUID" in globalThis.crypto
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
 const path = `${userId}/${random}.${ext}`;
 
 const { error } = await supabaseBrowser.storage
@@ -1310,7 +1311,8 @@ L </div>
       © {new Date().getFullYear()} Lupin. All rights reserved.
     </p>
   </div>
-</footer> 
+</footer>
+```
 
 );
 }
