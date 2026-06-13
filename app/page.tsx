@@ -51,7 +51,6 @@ name: string;
 };
 
 const BRAND_NAME = "Lupin";
-const BRAND_TAGLINE = "a righteous outlaw protecting your dignity";
 const VISITOR_KEY_STORAGE = "lupin_visitor_key";
 
 function emptyReactionCounts(): Record<ReactionType, number> {
@@ -75,7 +74,9 @@ if (typeof window === "undefined") return "";
 
 const existing = window.localStorage.getItem(VISITOR_KEY_STORAGE);
 
-if (existing && existing.length >= 20) return existing;
+if (existing && existing.length >= 20) {
+return existing;
+}
 
 const random =
 typeof globalThis.crypto !== "undefined" &&
@@ -224,7 +225,7 @@ setLoadingPosts(true);
     return;
   }
 
-  const ids = postRows.map((p) => p.id);
+  const ids = postRows.map((post) => post.id);
 
   const { data: reactions } = await supabaseBrowser
     .from("rupan_post_reactions")
@@ -235,26 +236,26 @@ setLoadingPosts(true);
     );
 
   const enriched: Post[] = postRows.map((post) => {
-    const rows = reactions?.filter((r) => r.post_id === post.id) ?? [];
+    const rows = reactions?.filter((row) => row.post_id === post.id) ?? [];
 
     const reactionCounts = emptyReactionCounts();
     const myReactions = emptyReactionFlags();
 
-    rows.forEach((r) => {
-      const type = r.reaction_type as ReactionType;
+    rows.forEach((row) => {
+      const type = row.reaction_type as ReactionType;
 
       if (type in reactionCounts) {
         reactionCounts[type] += 1;
       }
 
-      if (currentUserId && r.user_id === currentUserId) {
+      if (currentUserId && row.user_id === currentUserId) {
         myReactions[type] = true;
       }
 
       if (
         effectiveVisitorKey &&
-        r.visitor_key &&
-        r.visitor_key === effectiveVisitorKey
+        row.visitor_key &&
+        row.visitor_key === effectiveVisitorKey
       ) {
         myReactions[type] = true;
       }
@@ -395,7 +396,10 @@ const countVisitor = async () => {
     }
   } catch (error) {
     console.error("Visitor count request failed:", error);
-    if (alive) setVisitorCount(null);
+
+    if (alive) {
+      setVisitorCount(null);
+    }
   }
 };
 
@@ -410,7 +414,9 @@ return () => {
 
 useEffect(() => {
 return () => {
-if (imagePreview) URL.revokeObjectURL(imagePreview);
+if (imagePreview) {
+URL.revokeObjectURL(imagePreview);
+}
 };
 }, [imagePreview]);
 
@@ -441,7 +447,10 @@ setMessage("");
 setImageFile(null);
 
 ```
-if (imagePreview) URL.revokeObjectURL(imagePreview);
+if (imagePreview) {
+  URL.revokeObjectURL(imagePreview);
+}
+
 setImagePreview(null);
 ```
 
@@ -452,6 +461,7 @@ setMessage("");
 
 ```
 const file = event.target.files?.[0];
+
 if (!file) return;
 
 if (!file.type.startsWith("image/")) {
@@ -466,7 +476,9 @@ if (file.size > 6 * 1024 * 1024) {
   return;
 }
 
-if (imagePreview) URL.revokeObjectURL(imagePreview);
+if (imagePreview) {
+  URL.revokeObjectURL(imagePreview);
+}
 
 setImageFile(file);
 setImagePreview(URL.createObjectURL(file));
@@ -476,9 +488,15 @@ setImagePreview(URL.createObjectURL(file));
 
 const uploadImage = async (file: File, userId: string) => {
 const ext = file.name.split(".").pop() || "jpg";
-const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+const random =
+typeof globalThis.crypto !== "undefined" &&
+"randomUUID" in globalThis.crypto
+? globalThis.crypto.randomUUID()
+: `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
 ```
+const path = `${userId}/${random}.${ext}`;
+
 const { error } = await supabaseBrowser.storage
   .from("rupan-post-images")
   .upload(path, file, {
@@ -536,6 +554,7 @@ try {
 
   resetComposer();
   setComposerOpen(false);
+
   await loadPosts(user.id, visitorKey || getLupinVisitorKey());
 } catch {
   setMessage("Failed to publish the post.");
@@ -559,7 +578,6 @@ try {
   setVisitorKey(currentVisitorKey);
 
   await countPublicReaction(post.id, reactionType);
-
   await loadPosts(user?.id, currentVisitorKey);
 } catch (error: any) {
   alert(error?.message || "Failed to count reaction.");
@@ -700,7 +718,7 @@ return ( <main className="min-h-screen bg-[#f7f4ef] text-zinc-950"> <Header
         <input
           type="search"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(event) => setSearchQuery(event.target.value)}
           placeholder="Search stories, authors, or keywords"
           className="w-full bg-transparent text-sm font-semibold outline-none placeholder:text-zinc-400"
         />
@@ -851,7 +869,10 @@ return ( <main className="min-h-screen bg-[#f7f4ef] text-zinc-950"> <Header
       onTextChange={setPostText}
       onImageChange={handleImageChange}
       onRemoveImage={() => {
-        if (imagePreview) URL.revokeObjectURL(imagePreview);
+        if (imagePreview) {
+          URL.revokeObjectURL(imagePreview);
+        }
+
         setImagePreview(null);
         setImageFile(null);
       }}
@@ -906,9 +927,17 @@ className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-full 
 {loading ? ( <Loader2 size={17} className="animate-spin" />
 ) : lawsuit ? ( <Scale size={17} />
 ) : ( <HeartHandshake size={17} />
-)} <span className="text-center leading-tight">{label}</span>
-<span className={active ? "text-white/80" : "text-zinc-400"}>
-{count} </span> </button>
+)}
+
+```
+  <span className="text-center leading-tight">{label}</span>
+
+  <span className={active ? "text-white/80" : "text-zinc-400"}>
+    {count}
+  </span>
+</button>
+```
+
 );
 }
 
@@ -955,6 +984,7 @@ L </div>
           className="relative flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-zinc-900 shadow-sm transition hover:bg-zinc-50"
         >
           <MessageCircle size={18} />
+
           {unreadDmCount > 0 && (
             <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-black text-white">
               {unreadDmCount > 9 ? "9+" : unreadDmCount}
@@ -1005,6 +1035,7 @@ L </div>
             ) : (
               <LogOut size={16} />
             )}
+
             <span className="hidden sm:inline">Log out</span>
             <span className="sm:hidden">Out</span>
           </button>
@@ -1050,10 +1081,14 @@ onRemoveImage: () => void;
 onMessageClear: () => void;
 }) {
 return ( <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"> <div className="w-full rounded-t-[2rem] border border-black/10 bg-white shadow-2xl sm:max-w-2xl sm:rounded-[2rem]"> <div className="flex items-center justify-between border-b border-black/10 px-5 py-4 sm:px-6"> <div> <h3 className="text-lg font-black tracking-tight">
-Publish a post </h3> <p className="mt-1 text-xs font-medium text-zinc-500">
-Add a title, your story, and an optional photo. </p> </div>
+Publish a post </h3>
 
 ```
+        <p className="mt-1 text-xs font-medium text-zinc-500">
+          Add a title, your story, and an optional photo.
+        </p>
+      </div>
+
       <button
         type="button"
         onClick={onClose}
@@ -1077,8 +1112,8 @@ Add a title, your story, and an optional photo. </p> </div>
       <input
         type="text"
         value={postTitle}
-        onChange={(e) => {
-          onTitleChange(e.target.value);
+        onChange={(event) => {
+          onTitleChange(event.target.value);
           onMessageClear();
         }}
         placeholder="Title"
@@ -1088,8 +1123,8 @@ Add a title, your story, and an optional photo. </p> </div>
 
       <textarea
         value={postText}
-        onChange={(e) => {
-          onTextChange(e.target.value);
+        onChange={(event) => {
+          onTextChange(event.target.value);
           onMessageClear();
         }}
         placeholder="What happened?"
@@ -1155,6 +1190,7 @@ Add a title, your story, and an optional photo. </p> </div>
             ) : (
               <Send size={17} />
             )}
+
             Publish
           </button>
         </div>
@@ -1199,7 +1235,7 @@ return ( <div className="fixed inset-0 z-50 flex items-end justify-center bg-bla
 
     <textarea
       value={text}
-      onChange={(e) => onTextChange(e.target.value)}
+      onChange={(event) => onTextChange(event.target.value)}
       placeholder="Write a private message..."
       maxLength={1000}
       className="min-h-36 w-full resize-none rounded-3xl border border-black/10 bg-zinc-50 px-4 py-4 text-sm leading-7 outline-none focus:border-zinc-900 focus:bg-white"
@@ -1215,6 +1251,7 @@ return ( <div className="fixed inset-0 z-50 flex items-end justify-center bg-bla
       ) : (
         <Send size={17} />
       )}
+
       Send
     </button>
   </form>
@@ -1251,15 +1288,19 @@ L </div>
       <Link href="/about" className="hover:text-zinc-950">
         About
       </Link>
+
       <Link href="/terms" className="hover:text-zinc-950">
         Terms
       </Link>
+
       <Link href="/privacy" className="hover:text-zinc-950">
         Privacy
       </Link>
+
       <Link href="/donate" className="hover:text-zinc-950">
         Donate
       </Link>
+
       <Link href="/contact" className="hover:text-zinc-950">
         Contact
       </Link>
