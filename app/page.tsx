@@ -1310,8 +1310,7 @@ L </div>
       © {new Date().getFullYear()} Lupin. All rights reserved.
     </p>
   </div>
-</footer>
-```
+</footer> 
 
 );
 }
