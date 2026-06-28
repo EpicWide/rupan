@@ -1,0 +1,19 @@
+// app/page.tsx 안의 방문자 카운트 fetch 부분만 이 body 포함 버전으로 교체하세요.
+// getLupinVisitorKey() 함수가 이미 있으므로 그대로 사용합니다.
+
+const res = await fetch("/api/rupan/visitors", {
+  method: "POST",
+  cache: "no-store",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    visitorKey: getLupinVisitorKey(),
+    path: window.location.pathname,
+    referrer: document.referrer || "",
+    language: navigator.language || "",
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+    screenWidth: window.screen?.width || null,
+    screenHeight: window.screen?.height || null,
+  }),
+});
