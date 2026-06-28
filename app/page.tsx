@@ -58,7 +58,9 @@ const VISITOR_KEY_STORAGE = "lupin_visitor_key";
 
   public/lupin-featured-video.mp4
 
-  It will autoplay muted and stop after 3 plays.
+  It uses controls and sound is enabled.
+  Autoplay with sound may be blocked by some browsers until the user taps Play.
+  After the first play starts, it will repeat up to 3 times.
   If the file does not exist, the video card hides itself.
 */
 const FEATURED_VIDEO_SRC = "/lupin-featured-video.mp4";
@@ -713,7 +715,7 @@ export default function LupinHomePage() {
           </div>
         </section>
 
-        <section className="space-y-3">
+        <section className="space-y-2.5">
           {loadingPosts ? (
             <div className="rounded-[2rem] border border-black/10 bg-white p-10 text-center shadow-sm">
               <Loader2 className="mx-auto animate-spin text-zinc-400" />
@@ -734,7 +736,7 @@ export default function LupinHomePage() {
             filteredPosts.map((post, index) => (
               <article
                 key={post.id}
-                className={`overflow-hidden rounded-[1.65rem] border bg-white shadow-sm transition ${
+                className={`overflow-hidden rounded-[1.35rem] border bg-white shadow-sm transition ${
                   index === 0
                     ? "border-zinc-950/15 ring-1 ring-zinc-950/5"
                     : "border-black/10 hover:border-black/15"
@@ -746,8 +748,8 @@ export default function LupinHomePage() {
                   </div>
                 )}
 
-                <div className="px-5 py-4 sm:px-6">
-                  <div className="mb-4 flex items-center gap-3">
+                <div className="px-5 py-3.5 sm:px-6">
+                  <div className="mb-3 flex items-center gap-3">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-sm font-black text-white shadow-sm">
                       {post.author_nickname.slice(0, 1).toUpperCase()}
                     </div>
@@ -762,32 +764,32 @@ export default function LupinHomePage() {
                     </div>
                   </div>
 
-                  <h3 className="text-xl font-black tracking-tight text-zinc-950 sm:text-2xl">
+                  <h3 className="text-xl font-black tracking-tight text-zinc-950 sm:text-[1.35rem]">
                     {post.title}
                   </h3>
 
                   {post.body && (
-                    <p className="mt-3 whitespace-pre-wrap text-[15px] leading-6 text-zinc-700">
+                    <p className="mt-2 whitespace-pre-wrap text-[15px] leading-5 text-zinc-700">
                       {post.body}
                     </p>
                   )}
                 </div>
 
                 {post.image_url && (
-                  <div className="border-y border-black/5 bg-zinc-100 px-3 py-3 sm:px-5">
+                  <div className="border-y border-black/5 bg-zinc-100 px-3 py-2.5 sm:px-5">
                     <div className="flex justify-center overflow-hidden rounded-2xl bg-white">
                       <Image
                         src={post.image_url}
                         alt={post.title}
                         width={1000}
                         height={700}
-                        className="h-auto max-h-[300px] w-full object-contain"
+                        className="h-auto max-h-[280px] w-full object-contain"
                       />
                     </div>
                   </div>
                 )}
 
-                <div className="border-t border-black/10 bg-zinc-50/70 px-4 py-3">
+                <div className="border-t border-black/10 bg-zinc-50/70 px-4 py-2.5">
                   <div className="grid gap-2 sm:grid-cols-4">
                     <ReactionButton
                       label="Stay strong"
@@ -880,17 +882,30 @@ function FeaturedVideo() {
   if (hidden) return null;
 
   return (
-    <div className="w-full shrink-0 sm:w-[180px]">
-      <div className="overflow-hidden rounded-2xl border border-white/15 bg-white/10 shadow-lg ring-1 ring-white/10">
+    <div className="w-full shrink-0 sm:w-[220px]">
+      <div className="overflow-hidden rounded-2xl border border-white/15 bg-black/40 shadow-lg ring-1 ring-white/10">
         <video
           key={playCount}
           src={FEATURED_VIDEO_SRC}
           autoPlay
-          muted
+          controls
           playsInline
           preload="metadata"
-          className="aspect-video h-auto w-full object-cover"
+          className="h-auto max-h-[160px] w-full bg-black object-contain"
           onError={() => setHidden(true)}
+          onCanPlay={(event) => {
+            event.currentTarget.volume = 1;
+            const playPromise = event.currentTarget.play();
+
+            if (playPromise) {
+              playPromise.catch(() => {
+                /*
+                  Most browsers block autoplay with sound.
+                  Controls remain visible, so the user can tap Play once.
+                */
+              });
+            }
+          }}
           onEnded={(event) => {
             if (playCount >= FEATURED_VIDEO_MAX_PLAYS) {
               event.currentTarget.pause();
@@ -1148,7 +1163,7 @@ function ComposerModal({
             }}
             placeholder="What happened?"
             maxLength={3000}
-            className="min-h-40 w-full resize-none rounded-3xl border border-black/10 bg-zinc-50 px-4 py-4 text-sm leading-6 outline-none focus:border-zinc-900 focus:bg-white"
+            className="min-h-40 w-full resize-none rounded-3xl border border-black/10 bg-zinc-50 px-4 py-4 text-sm leading-5 outline-none focus:border-zinc-900 focus:bg-white"
           />
 
           {imagePreview && (
@@ -1261,7 +1276,7 @@ function DmModal({
           onChange={(event) => onTextChange(event.target.value)}
           placeholder="Write a private message..."
           maxLength={1000}
-          className="min-h-36 w-full resize-none rounded-3xl border border-black/10 bg-zinc-50 px-4 py-4 text-sm leading-6 outline-none focus:border-zinc-900 focus:bg-white"
+          className="min-h-36 w-full resize-none rounded-3xl border border-black/10 bg-zinc-50 px-4 py-4 text-sm leading-5 outline-none focus:border-zinc-900 focus:bg-white"
         />
 
         <button
