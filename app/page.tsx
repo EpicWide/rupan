@@ -53,6 +53,17 @@ type UserState = {
 const BRAND_NAME = "Lupin";
 const VISITOR_KEY_STORAGE = "lupin_visitor_key";
 
+/*
+  Put your specific top-right video here:
+
+  public/lupin-featured-video.mp4
+
+  It will autoplay muted and stop after 3 plays.
+  If the file does not exist, the video card hides itself.
+*/
+const FEATURED_VIDEO_SRC = "/lupin-featured-video.mp4";
+const FEATURED_VIDEO_MAX_PLAYS = 3;
+
 function emptyReactionCounts(): Record<ReactionType, number> {
   return {
     cheer_up: 0,
@@ -193,73 +204,74 @@ export default function LupinHomePage() {
 
   const loadPosts = useCallback(
     async (currentUserId?: string, currentVisitorKey?: string) => {
-      setLoadingPosts(true);
+      try {
+        const effectiveVisitorKey =
+          currentVisitorKey ||
+          (typeof window !== "undefined"
+            ? window.localStorage.getItem(VISITOR_KEY_STORAGE) || ""
+            : "");
 
-      const effectiveVisitorKey =
-        currentVisitorKey ||
-        (typeof window !== "undefined"
-          ? window.localStorage.getItem(VISITOR_KEY_STORAGE) || ""
-          : "");
+        const { data: postRows, error } = await supabaseBrowser
+          .from("rupan_posts")
+          .select(
+            "id, author_id, author_nickname, title, body, image_url, created_at"
+          )
+          .order("created_at", { ascending: false })
+          .limit(80);
 
-      const { data: postRows, error } = await supabaseBrowser
-        .from("rupan_posts")
-        .select(
-          "id, author_id, author_nickname, title, body, image_url, created_at"
-        )
-        .order("created_at", { ascending: false })
-        .limit(80);
+        if (error || !postRows) {
+          setPosts([]);
+          return;
+        }
 
-      if (error || !postRows) {
-        setPosts([]);
-        setLoadingPosts(false);
-        return;
-      }
+        const ids = postRows.map((post) => post.id);
 
-      const ids = postRows.map((post) => post.id);
+        const { data: reactions } = await supabaseBrowser
+          .from("rupan_post_reactions")
+          .select("post_id, user_id, visitor_key, reaction_type")
+          .in(
+            "post_id",
+            ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]
+          );
 
-      const { data: reactions } = await supabaseBrowser
-        .from("rupan_post_reactions")
-        .select("post_id, user_id, visitor_key, reaction_type")
-        .in(
-          "post_id",
-          ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]
-        );
+        const enriched: Post[] = postRows.map((post) => {
+          const rows =
+            reactions?.filter((row) => row.post_id === post.id) ?? [];
 
-      const enriched: Post[] = postRows.map((post) => {
-        const rows = reactions?.filter((row) => row.post_id === post.id) ?? [];
+          const reactionCounts = emptyReactionCounts();
+          const myReactions = emptyReactionFlags();
 
-        const reactionCounts = emptyReactionCounts();
-        const myReactions = emptyReactionFlags();
+          rows.forEach((row) => {
+            const type = row.reaction_type as ReactionType;
 
-        rows.forEach((row) => {
-          const type = row.reaction_type as ReactionType;
+            if (type in reactionCounts) {
+              reactionCounts[type] += 1;
+            }
 
-          if (type in reactionCounts) {
-            reactionCounts[type] += 1;
-          }
+            if (currentUserId && row.user_id === currentUserId) {
+              myReactions[type] = true;
+            }
 
-          if (currentUserId && row.user_id === currentUserId) {
-            myReactions[type] = true;
-          }
+            if (
+              effectiveVisitorKey &&
+              row.visitor_key &&
+              row.visitor_key === effectiveVisitorKey
+            ) {
+              myReactions[type] = true;
+            }
+          });
 
-          if (
-            effectiveVisitorKey &&
-            row.visitor_key &&
-            row.visitor_key === effectiveVisitorKey
-          ) {
-            myReactions[type] = true;
-          }
+          return {
+            ...post,
+            reactionCounts,
+            myReactions,
+          };
         });
 
-        return {
-          ...post,
-          reactionCounts,
-          myReactions,
-        };
-      });
-
-      setPosts(enriched);
-      setLoadingPosts(false);
+        setPosts(enriched);
+      } finally {
+        setLoadingPosts(false);
+      }
     },
     []
   );
@@ -638,33 +650,41 @@ export default function LupinHomePage() {
         </div>
 
         <section className="overflow-hidden rounded-[1.5rem] border border-black/10 bg-white shadow-sm">
-          <div className="bg-gradient-to-br from-black via-zinc-900 to-zinc-700 px-5 py-4 text-white sm:px-6 sm:py-5">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/60">
-              {BRAND_NAME}
-            </p>
+          <div className="flex flex-col gap-5 bg-gradient-to-br from-black via-zinc-900 to-zinc-700 px-5 py-5 text-white sm:flex-row sm:items-start sm:justify-between sm:px-6 sm:py-6">
+            <div className="min-w-0 flex-1">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/60">
+                {BRAND_NAME}
+              </p>
 
-            <p className="max-w-3xl text-sm leading-7 text-white/85">
-              The law may not compensate what you lost. Your boss may be an
-              asshole. HR may be a deeply unfair group. This is a space to
-              protect your life when the people hurting you may be the last ones
-              you expected.
-            </p>
+              <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
+                What would you do?
+              </h1>
 
-            <div className="mt-3">
-              {user ? (
-                <div className="inline-flex max-w-full items-center rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/85 ring-1 ring-white/15">
-                  Logged in as&nbsp;
-                  <span className="truncate font-black text-white">
-                    {user.name}
-                  </span>
-                </div>
-              ) : (
-                <div className="inline-flex max-w-full items-center rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/85 ring-1 ring-white/15">
-                  You can support posts without signing up. Log in only to
-                  publish or message.
-                </div>
-              )}
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/85">
+                The law may not compensate what you lost. Your boss may be an
+                asshole. HR may be a deeply unfair group. This is a space to
+                protect your life when the people hurting you may be the last
+                ones you expected.
+              </p>
+
+              <div className="mt-4">
+                {user ? (
+                  <div className="inline-flex max-w-full items-center rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/85 ring-1 ring-white/15">
+                    Logged in as&nbsp;
+                    <span className="truncate font-black text-white">
+                      {user.name}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="inline-flex max-w-full items-center rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/85 ring-1 ring-white/15">
+                    You can support posts without signing up. Log in only to
+                    publish or message.
+                  </div>
+                )}
+              </div>
             </div>
+
+            <FeaturedVideo />
           </div>
         </section>
 
@@ -693,7 +713,7 @@ export default function LupinHomePage() {
           </div>
         </section>
 
-        <section className="space-y-4">
+        <section className="space-y-3">
           {loadingPosts ? (
             <div className="rounded-[2rem] border border-black/10 bg-white p-10 text-center shadow-sm">
               <Loader2 className="mx-auto animate-spin text-zinc-400" />
@@ -714,7 +734,7 @@ export default function LupinHomePage() {
             filteredPosts.map((post, index) => (
               <article
                 key={post.id}
-                className={`overflow-hidden rounded-[2rem] border bg-white shadow-sm transition ${
+                className={`overflow-hidden rounded-[1.65rem] border bg-white shadow-sm transition ${
                   index === 0
                     ? "border-zinc-950/15 ring-1 ring-zinc-950/5"
                     : "border-black/10 hover:border-black/15"
@@ -726,9 +746,9 @@ export default function LupinHomePage() {
                   </div>
                 )}
 
-                <div className="px-5 py-5 sm:px-6">
-                  <div className="mb-5 flex items-center gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-sm font-black text-white shadow-sm">
+                <div className="px-5 py-4 sm:px-6">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-sm font-black text-white shadow-sm">
                       {post.author_nickname.slice(0, 1).toUpperCase()}
                     </div>
 
@@ -742,32 +762,32 @@ export default function LupinHomePage() {
                     </div>
                   </div>
 
-                  <h3 className="text-2xl font-black tracking-tight text-zinc-950">
+                  <h3 className="text-xl font-black tracking-tight text-zinc-950 sm:text-2xl">
                     {post.title}
                   </h3>
 
                   {post.body && (
-                    <p className="mt-4 whitespace-pre-wrap text-[15px] leading-8 text-zinc-700">
+                    <p className="mt-3 whitespace-pre-wrap text-[15px] leading-6 text-zinc-700">
                       {post.body}
                     </p>
                   )}
                 </div>
 
                 {post.image_url && (
-                  <div className="border-y border-black/5 bg-zinc-100 px-3 py-3 sm:px-5 sm:py-4">
+                  <div className="border-y border-black/5 bg-zinc-100 px-3 py-3 sm:px-5">
                     <div className="flex justify-center overflow-hidden rounded-2xl bg-white">
                       <Image
                         src={post.image_url}
                         alt={post.title}
                         width={1000}
                         height={700}
-                        className="h-auto max-h-[320px] w-full object-contain"
+                        className="h-auto max-h-[300px] w-full object-contain"
                       />
                     </div>
                   </div>
                 )}
 
-                <div className="border-t border-black/10 bg-zinc-50/70 px-4 py-4">
+                <div className="border-t border-black/10 bg-zinc-50/70 px-4 py-3">
                   <div className="grid gap-2 sm:grid-cols-4">
                     <ReactionButton
                       label="Stay strong"
@@ -850,6 +870,43 @@ export default function LupinHomePage() {
 
       <Footer />
     </main>
+  );
+}
+
+function FeaturedVideo() {
+  const [playCount, setPlayCount] = useState(1);
+  const [hidden, setHidden] = useState(false);
+
+  if (hidden) return null;
+
+  return (
+    <div className="w-full shrink-0 sm:w-[180px]">
+      <div className="overflow-hidden rounded-2xl border border-white/15 bg-white/10 shadow-lg ring-1 ring-white/10">
+        <video
+          key={playCount}
+          src={FEATURED_VIDEO_SRC}
+          autoPlay
+          muted
+          playsInline
+          preload="metadata"
+          className="aspect-video h-auto w-full object-cover"
+          onError={() => setHidden(true)}
+          onEnded={(event) => {
+            if (playCount >= FEATURED_VIDEO_MAX_PLAYS) {
+              event.currentTarget.pause();
+              return;
+            }
+
+            event.currentTarget.currentTime = 0;
+            setPlayCount((value) => value + 1);
+          }}
+        />
+      </div>
+
+      <p className="mt-2 text-center text-[10px] font-bold uppercase tracking-[0.22em] text-white/45">
+        Watch the moment
+      </p>
+    </div>
   );
 }
 
@@ -1091,7 +1148,7 @@ function ComposerModal({
             }}
             placeholder="What happened?"
             maxLength={3000}
-            className="min-h-40 w-full resize-none rounded-3xl border border-black/10 bg-zinc-50 px-4 py-4 text-sm leading-7 outline-none focus:border-zinc-900 focus:bg-white"
+            className="min-h-40 w-full resize-none rounded-3xl border border-black/10 bg-zinc-50 px-4 py-4 text-sm leading-6 outline-none focus:border-zinc-900 focus:bg-white"
           />
 
           {imagePreview && (
@@ -1101,7 +1158,7 @@ function ComposerModal({
                 alt="Uploaded preview"
                 width={1000}
                 height={700}
-                className="max-h-[280px] w-full object-contain"
+                className="max-h-[260px] w-full object-contain"
               />
 
               <button
@@ -1204,7 +1261,7 @@ function DmModal({
           onChange={(event) => onTextChange(event.target.value)}
           placeholder="Write a private message..."
           maxLength={1000}
-          className="min-h-36 w-full resize-none rounded-3xl border border-black/10 bg-zinc-50 px-4 py-4 text-sm leading-7 outline-none focus:border-zinc-900 focus:bg-white"
+          className="min-h-36 w-full resize-none rounded-3xl border border-black/10 bg-zinc-50 px-4 py-4 text-sm leading-6 outline-none focus:border-zinc-900 focus:bg-white"
         />
 
         <button
