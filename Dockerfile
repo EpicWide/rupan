@@ -28,7 +28,6 @@ ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Prevent deployment of a build with empty public variables.
 RUN test -n "$NEXT_PUBLIC_SUPABASE_URL" || \
     (echo "ERROR: NEXT_PUBLIC_SUPABASE_URL is missing" && exit 1)
 
@@ -41,7 +40,6 @@ RUN test -n "$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY" || \
 RUN test -n "$NEXT_PUBLIC_APP_URL" || \
     (echo "ERROR: NEXT_PUBLIC_APP_URL is missing" && exit 1)
 
-# Validate that the Stripe browser key is a publishable key.
 RUN case "$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY" in \
       pk_live_*|pk_test_*) echo "Stripe publishable key is present." ;; \
       *) echo "ERROR: Stripe publishable key must start with pk_live_ or pk_test_"; exit 1 ;; \
@@ -66,6 +64,9 @@ RUN addgroup --system --gid 1001 nodejs \
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Important: needed for /lupin-featured-video.mp4 and other files in public/
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 USER nextjs
 
