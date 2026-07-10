@@ -764,15 +764,28 @@ export default function LupinHomePage() {
                     </div>
                   </div>
 
-                  <h3 className="text-xl font-black tracking-tight text-zinc-950 sm:text-[1.35rem]">
-                    {post.title}
-                  </h3>
+                  <Link
+                    href={`/posts/${post.id}`}
+                    className="block rounded-xl transition hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-950/20"
+                    aria-label={`Open post: ${post.title}`}
+                  >
+                    <h3 className="text-xl font-black tracking-tight text-zinc-950 sm:text-[1.35rem]">
+                      {post.title}
+                    </h3>
+                  </Link>
 
                   {post.body && (
                     <p className="mt-2 whitespace-pre-wrap text-[15px] leading-5 text-zinc-700">
                       {post.body}
                     </p>
                   )}
+
+                  <Link
+                    href={`/posts/${post.id}`}
+                    className="mt-3 inline-flex text-xs font-black uppercase tracking-[0.18em] text-zinc-400 transition hover:text-zinc-950"
+                  >
+                    Read full post
+                  </Link>
                 </div>
 
                 {post.image_url && (
