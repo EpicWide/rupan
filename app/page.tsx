@@ -684,6 +684,15 @@ export default function LupinHomePage() {
                   </div>
                 )}
               </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link
+                  href="/people/marsalis-smith"
+                  className="inline-flex rounded-full bg-white px-4 py-2 text-xs font-black text-zinc-950 shadow-sm transition hover:bg-zinc-100"
+                >
+                  Marsalis Smith — Public Accountability Record
+                </Link>
+              </div>
             </div>
 
             <FeaturedVideo />
@@ -1359,6 +1368,10 @@ function Footer() {
 
           <Link href="/contact" className="hover:text-zinc-950">
             Contact
+          </Link>
+
+          <Link href="/people/marsalis-smith" className="hover:text-zinc-950">
+            Marsalis Smith
           </Link>
         </nav>
 
