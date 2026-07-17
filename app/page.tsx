@@ -65,6 +65,29 @@ const VISITOR_KEY_STORAGE = "lupin_visitor_key";
 */
 const FEATURED_VIDEO_SRC = "/lupin-featured-video.mp4";
 const FEATURED_VIDEO_MAX_PLAYS = 3;
+const POSTS_QUERY_TIMEOUT_MS = 12000;
+const REACTIONS_QUERY_TIMEOUT_MS = 8000;
+
+async function withTimeout<T>(
+  promise: PromiseLike<T>,
+  timeoutMs: number,
+  timeoutResult: T
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise<T>((resolve) => {
+        timeoutId = setTimeout(() => resolve(timeoutResult), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
 
 function emptyReactionCounts(): Record<ReactionType, number> {
   return {
@@ -160,6 +183,7 @@ export default function LupinHomePage() {
   const [message, setMessage] = useState("");
   const [posts, setPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
+  const [postLoadError, setPostLoadError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [reactingKey, setReactingKey] = useState("");
 
@@ -206,6 +230,9 @@ export default function LupinHomePage() {
 
   const loadPosts = useCallback(
     async (currentUserId?: string, currentVisitorKey?: string) => {
+      setLoadingPosts(true);
+      setPostLoadError("");
+
       try {
         const effectiveVisitorKey =
           currentVisitorKey ||
@@ -213,32 +240,60 @@ export default function LupinHomePage() {
             ? window.localStorage.getItem(VISITOR_KEY_STORAGE) || ""
             : "");
 
-        const { data: postRows, error } = await supabaseBrowser
-          .from("rupan_posts")
-          .select(
-            "id, author_id, author_nickname, title, body, image_url, created_at"
-          )
-          .order("created_at", { ascending: false })
-          .limit(80);
+        const postResult = await withTimeout(
+          supabaseBrowser
+            .from("rupan_posts")
+            .select(
+              "id, author_id, author_nickname, title, body, image_url, created_at"
+            )
+            .order("created_at", { ascending: false })
+            .limit(80),
+          POSTS_QUERY_TIMEOUT_MS,
+          {
+            data: null,
+            error: {
+              message:
+                "Post loading timed out. Check Supabase RLS, network, or environment variables.",
+            },
+          } as any
+        );
 
-        if (error || !postRows) {
+        const postRows = postResult.data;
+        const postError = postResult.error;
+
+        if (postError || !postRows) {
+          console.error("Lupin post loading failed:", postError);
+          setPostLoadError(
+            postError?.message ||
+              "Posts could not be loaded. Please refresh the page."
+          );
           setPosts([]);
           return;
         }
 
-        const ids = postRows.map((post) => post.id);
+        const ids = postRows.map((post: any) => post.id);
 
-        const { data: reactions } = await supabaseBrowser
-          .from("rupan_post_reactions")
-          .select("post_id, user_id, visitor_key, reaction_type")
-          .in(
-            "post_id",
-            ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]
+        let reactions: any[] = [];
+
+        if (ids.length > 0) {
+          const reactionResult = await withTimeout(
+            supabaseBrowser
+              .from("rupan_post_reactions")
+              .select("post_id, user_id, visitor_key, reaction_type")
+              .in("post_id", ids),
+            REACTIONS_QUERY_TIMEOUT_MS,
+            { data: [], error: null } as any
           );
 
-        const enriched: Post[] = postRows.map((post) => {
-          const rows =
-            reactions?.filter((row) => row.post_id === post.id) ?? [];
+          if (reactionResult.error) {
+            console.error("Lupin reactions loading failed:", reactionResult.error);
+          }
+
+          reactions = reactionResult.data || [];
+        }
+
+        const enriched: Post[] = postRows.map((post: any) => {
+          const rows = reactions.filter((row) => row.post_id === post.id);
 
           const reactionCounts = emptyReactionCounts();
           const myReactions = emptyReactionFlags();
@@ -271,6 +326,12 @@ export default function LupinHomePage() {
         });
 
         setPosts(enriched);
+      } catch (error: any) {
+        console.error("Unexpected Lupin post loading error:", error);
+        setPostLoadError(
+          error?.message || "Unexpected post loading error. Please refresh."
+        );
+        setPosts([]);
       } finally {
         setLoadingPosts(false);
       }
@@ -318,10 +379,14 @@ export default function LupinHomePage() {
   }, [loadPosts, loadUnreadDmCount]);
 
   useEffect(() => {
+    const currentVisitorKey = getLupinVisitorKey();
+    setVisitorKey(currentVisitorKey);
+    loadPosts(undefined, currentVisitorKey);
     loadSession();
 
     const { data } = supabaseBrowser.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
+        window.setTimeout(async () => {
         const currentVisitorKey = getLupinVisitorKey();
         setVisitorKey(currentVisitorKey);
 
@@ -353,6 +418,7 @@ export default function LupinHomePage() {
         await loadUnreadDmCount(sessionUser.id);
         await loadPosts(sessionUser.id, currentVisitorKey);
         setAuthLoading(false);
+        }, 0);
       }
     );
 
@@ -372,6 +438,16 @@ export default function LupinHomePage() {
           headers: {
             "Content-Type": "application/json",
           },
+          body: JSON.stringify({
+            visitorKey: getLupinVisitorKey(),
+            path: window.location.pathname,
+            referrer: document.referrer || "",
+            language: navigator.language || "",
+            timezone:
+              Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+            screenWidth: window.screen?.width || null,
+            screenHeight: window.screen?.height || null,
+          }),
         });
 
         const json = await res.json();
@@ -684,15 +760,6 @@ export default function LupinHomePage() {
                   </div>
                 )}
               </div>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Link
-                  href="/people/marsalis-smith"
-                  className="inline-flex rounded-full bg-white px-4 py-2 text-xs font-black text-zinc-950 shadow-sm transition hover:bg-zinc-100"
-                >
-                  Marsalis Smith — Public Accountability Record
-                </Link>
-              </div>
             </div>
 
             <FeaturedVideo />
@@ -731,6 +798,22 @@ export default function LupinHomePage() {
               <p className="mt-3 text-sm font-bold text-zinc-500">
                 Loading posts...
               </p>
+            </div>
+          ) : postLoadError ? (
+            <div className="rounded-[2rem] border border-red-200 bg-white p-8 text-center shadow-sm">
+              <p className="text-base font-black text-red-700">
+                Posts could not be loaded.
+              </p>
+              <p className="mt-2 text-sm leading-6 text-zinc-600">
+                {postLoadError}
+              </p>
+              <button
+                type="button"
+                onClick={() => loadPosts(user?.id, visitorKey || getLupinVisitorKey())}
+                className="mt-4 rounded-full bg-zinc-950 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-zinc-800"
+              >
+                Retry
+              </button>
             </div>
           ) : filteredPosts.length === 0 ? (
             <div className="rounded-[2rem] border border-dashed border-black/15 bg-white/70 p-10 text-center">
@@ -1368,10 +1451,6 @@ function Footer() {
 
           <Link href="/contact" className="hover:text-zinc-950">
             Contact
-          </Link>
-
-          <Link href="/people/marsalis-smith" className="hover:text-zinc-950">
-            Marsalis Smith
           </Link>
         </nav>
 
